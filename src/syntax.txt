@@ -1,0 +1,43 @@
+tokens:
+( ) { } [ ]
+
+unary:
++ - & ! ~  ! *
+
+binary:
+
+LSHIFT <<
+RSHIFT >>
+EQ ==
+NOTEQ !=
+LTEQ <=
+GTEQ >=
+OR ||
+AND &&
+
+
++ - | ^ << >> & * / %
+== != > >= <= <
+&&
+||
+?:
+
+assign:
+=
+
+COLON_ASSIGN :=
+ADD_ASSIGN +=
+SUB_ASSIGN -+
+MUL_ASSIGN *=
+DIV_ASSIGN /=
+MOD_ASSIGN %=
+OR_ASSIGN |=
+XOR_ASSIGN ^=
+LSHIFT_ASSIGN <<=
+RSHIFT_ASSIGN >>=
+
+NAME = [a-Z_][0-9]*
+INT = [1-9][0-9]* | 0[Xx][0-9A-f]*
+FLOAT = [0-9]*[.][0-9]*([eE][+-]?[0-9]+)?
+CHAR = '\' . \''
+STR = '"' [^"]* '"'
