@@ -61,7 +61,6 @@ void syntax_error(const char* fmt, ...) {
     vprintf(fmt, args);
     printf("\n");
     va_end(args);
-    exit(1);
 }
 
 typedef enum TokenKind {
@@ -69,7 +68,8 @@ typedef enum TokenKind {
     TOKEN_INT,
     TOKEN_FLOAT,
     TOKEN_NAME,
-    TOKEN_CHAR
+    TOKEN_CHAR,
+    TOKEN_STR
 } TokenKind;
 
 typedef enum TokenMod {
@@ -94,6 +94,7 @@ typedef struct Token {
         uint64_t int_val;
         double float_val;
         const char *name;
+        const char *str_val;
     };
 } Token;
 
@@ -168,6 +169,7 @@ void parse_int() {
             base = 8;
         } else {
             syntax_error("Invalid literal suffix: '%c'", *stream);
+            stream++;
         }
     }
     uint64_t val = 0;
@@ -181,10 +183,15 @@ void parse_int() {
 
         if (digit >= base) {
             syntax_error("Digit '%c' out of range for base %lu", *stream, base);
+            digit = 0;
         }
 
         if (val > (UINT64_MAX - digit) / base) {
             syntax_error("Integer literal is overflow overflow");
+            while (isdigit(*stream)) {
+                stream++;
+            }
+            val = 0;
         }
 
         val = val * base + digit;
@@ -249,6 +256,7 @@ void parse_char() {
     char val = 0;
     if (*stream == '\'') {
         syntax_error("Char literal can not be empty");
+        stream++;
     } else if (*stream == '\n') {
         syntax_error("Char literal can not contain new line");
     } else if (*stream == '\\') {
@@ -270,11 +278,39 @@ void parse_char() {
 
     token.kind = TOKEN_CHAR;
     token.mod = TOKENMOD_CHAR;
-    token.int_val = val;
+    token.int_val = (uint64_t) val;
 }
 
 void parse_str() {
+    assert(*stream == '"');
+    char *str_buf = NULL;
+    stream++;
+    while (*stream && *stream != '"') {
+        char val = *stream;
+        if (val == '\n') {
+            syntax_error("String literal can not contain new line");
+        } else if (val == '\\') {
+            stream++;
+            val = escape_to_char[*stream];
+            if (val == 0 && *stream != '0') {
+                syntax_error("Invalid string literal escape '\\%c", *stream);
+            }
+        }
 
+        buf_push(str_buf, val);
+        stream++;
+    }
+
+    if (*stream) {
+        assert(*stream == '"');
+        stream++;
+    } else {
+        syntax_error("Unexpected end of file within string literal");
+    }
+
+    buf_push(str_buf, 0);
+    token.kind = TOKEN_STR;
+    token.str_val = str_buf;
 }
 
 void next_token() {
@@ -290,6 +326,7 @@ void next_token() {
         parse_char();
         break;
     case '"':
+        parse_str();
         break;
     case '.':
         parse_float();
@@ -450,6 +487,10 @@ void lex_test() {
     next_token();
     assert(token.int_val == '\n');
     printf("%c\n", token.int_val);
+
+    init_stream("\"b\\n\\t\"");
+    assert(strcmp(token.str_val, "b\n\t") == 0);
+    printf("%s", token.str_val);
 }
 
 void str_intern_test() {
