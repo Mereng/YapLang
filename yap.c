@@ -76,8 +76,20 @@ void str_intern_test() {
 
 
 void expr_test() {
-    Expression *expr = expression_int(56);
-    assert(expr->kind == EXPR_INT && expr->int_val == 56);
+    Expression *exprs[] = {
+        expression_unary('-', expression_float(3.14)),
+        expression_binary('/', expression_int(5), expression_int(10)),
+        expression_ternary(expression_name("isTrue"), expression_str("yes"), expression_str("no")),
+        expression_field(expression_name("user"), "name"),
+        expression_cast(typespec_pointer(typespec_name("float")), expression_name("void_ptr")),
+        expression_call(expression_name("sum"), (Expression*[]){expression_int(2), expression_int(5)}, 2),
+        expression_index(expression_field(expression_name("user"), "photos"), expression_int(2))
+    };
+
+    for (Expression **it = exprs; it != exprs + sizeof(exprs) / sizeof(*exprs) ; it++) {
+        print_expression(*it);
+        printf("\n");
+    }
 }
 
 void ast_test() {

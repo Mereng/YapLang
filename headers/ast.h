@@ -1,8 +1,8 @@
 #ifndef YAP_AST_H
 #define YAP_AST_H
 
+#include <stddef.h>
 #include <stdint.h>
-#include "buf.h"
 #include <token.h>
 
 typedef enum TypespecKind TypespecKind;
@@ -25,7 +25,6 @@ typedef struct Case Case;
 
 enum TypespecKind {
     TYPESPEC_NONE,
-    TYPESPEC_INT,
     TYPESPEC_ARRAY,
     TYPESPEC_POINTER,
     TYPESPEC_NAME,
@@ -33,7 +32,8 @@ enum TypespecKind {
 };
 
 struct FuncTypesec {
-    BUF(Typespec) **args_types;
+    Typespec **args_types;
+    size_t num_args_types;
     Typespec *return_type;
 };
 
@@ -67,22 +67,24 @@ enum DeclarationKind {
 };
 
 struct EnumItem {
-    BUF(const char) *names;
+    const char *name;
     Typespec *type;
 };
 
 struct AggregateItem {
-    BUF(const char) **names;
+    const char **names;
+    size_t num_names;
     Typespec *type;
 };
 
 struct FuncParam {
-    BUF(const char) *name;
+    const char *name;
     Typespec *type;
 };
 
 struct FuncDeclaration {
-    BUF(FuncParam) *params;
+    FuncParam *params;
+    size_t num_params;
     Typespec *return_type;
 };
 
@@ -91,8 +93,14 @@ struct Declaration {
     DeclarationKind kind;
     const char *name;
     union {
-        BUF(EnumItem) *enum_items;
-        BUF(AggregateItem) *aggregate_items;
+        struct {
+            EnumItem *enum_items;
+            size_t num_enum_items;
+        };
+        struct {
+            AggregateItem *aggregate_items;
+            size_t num_aggregate_items;
+        };
         struct {
             Typespec *type;
             Expression *expr;
@@ -127,7 +135,8 @@ struct Expression {
         //compound
         struct {
             Typespec *compound_type;
-            BUF(Expression) **compound_args;
+            Expression **compound_args;
+            size_t num_compound_args;
         };
         //cast
         struct {
@@ -138,7 +147,10 @@ struct Expression {
         struct {
             Expression *operand;
             union {
-                BUF(Expression) **args;
+                struct {
+                    Expression **args;
+                    size_t num_args;
+                };
                 Expression *index;
                 const char *field;
             };
@@ -167,9 +179,11 @@ Expression* expression_cast(Typespec *cast_type, Expression *cast_expr);
 Expression* expression_unary(TokenKind operator, Expression *operand);
 Expression* expression_binary(TokenKind operator, Expression *left, Expression *right);
 Expression* expression_ternary(Expression *cond, Expression *then_expr, Expression *else_expr);
-Expression* expression_call(Expression *operand, Expression **args);
+Expression* expression_call(Expression *operand, Expression **args, size_t num_args);
 Expression* expression_index(Expression *operand, Expression *index);
 Expression* expression_field(Expression *operand, const char *field);
+
+void print_expression(Expression *expr);
 
 enum StatementKind {
     STMT_NONE,
@@ -187,7 +201,8 @@ enum StatementKind {
 };
 
 struct StatementBlock {
-    BUF(Statement) **stmt;
+    Statement **statements;
+    size_t num_statements;
 };
 
 struct ElseIf {
@@ -196,7 +211,8 @@ struct ElseIf {
 };
 
 struct Case {
-    BUF(Expression) **expressions;
+    Expression **expressions;
+    size_t num_expressions;
     StatementBlock *block;
 };
 
@@ -207,7 +223,8 @@ struct Statement {
     union {
         //if
         struct {
-            BUF(ElseIf) *else_ifs;
+            ElseIf *else_ifs;
+            size_t num_else_ifs;
             StatementBlock else_block;
         };
         //for
@@ -217,7 +234,8 @@ struct Statement {
         };
         //switch
         struct {
-            BUF(Case) **cases;
+            Case **cases;
+            size_t num_cases;
         };
         //auto assign
         struct {
