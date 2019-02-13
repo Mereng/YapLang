@@ -13,9 +13,10 @@
 
 #include "tools.h"
 #include "buf.h"
+#include "ast.h"
+#include "fortests.c"
 #include "yap.c"
 #include "lexer.c"
-#include "ast.h"
 
 int main() {
     buf_test();

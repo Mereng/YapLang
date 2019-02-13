@@ -7,20 +7,41 @@
 
 typedef enum TypespecKind TypespecKind;
 typedef struct FuncTypesec FuncTypesec;
+typedef struct PointerTypespec PointerTypespec;
+typedef struct ArrayTypespec ArrayTypespec;
 typedef struct Typespec Typespec;
 typedef enum DeclarationKind DeclarationKind;
 typedef struct EnumItem EnumItem;
 typedef struct AggregateItem AggregateItem;
 typedef struct FuncParam FuncParam;
+typedef struct EnumDeclaration EnumDeclaration;
+typedef struct AggregateDeclaration AggregateDeclaration;
+typedef struct VarDeclaration VarDeclaration;
+typedef struct ConstDeclaration ConstDeclaration;
 typedef struct FuncDeclaration FuncDeclaration;
+typedef struct TypedefDeclaration TypedefDeclaration;
 typedef struct Declaration Declaration;
 typedef enum ExpressionKind ExpressionKind;
+typedef struct CompoundExpression CompundExpression;
+typedef struct UnaryExpression UnaryExpression;
+typedef struct BinaryExpression BinaryExpression;
+typedef struct TernaryExpression TernaryExpression;
+typedef struct CastExpression CastExpression;
+typedef struct CallExpression CallExpression;
+typedef struct IndexExpression IndexExpression;
+typedef struct FieldExpression FieldExpression;
 typedef struct Expression Expression;
 typedef enum StatementKind StatementKind;
+typedef struct ElseIf ElseIf;
+typedef struct IfStatement IfStatement;
+typedef struct ForStatement ForStatement;
+typedef struct WhileStatement WhileStatement;
+typedef struct SwitchCase SwitchCase;
+typedef struct SwitchStatement SwitchStatement;
+typedef struct AssignStatement AssignStatement;
+typedef struct AutoAssignStatement AutoAssignStatement;
 typedef struct Statement Statement;
 typedef struct StatementBlock StatementBlock;
-typedef struct ElseIf ElseIf;
-typedef struct Case Case;
 
 
 enum TypespecKind {
@@ -37,15 +58,22 @@ struct FuncTypesec {
     Typespec *return_type;
 };
 
+struct PointerTypespec {
+    Typespec *base;
+};
+
+struct ArrayTypespec {
+    Typespec *base;
+    Expression *size;
+};
+
 struct Typespec {
     TypespecKind kind;
-    struct {
-        FuncTypesec *func;
+    union {
         const char *name;
-        struct {
-            Typespec *base_type;
-            Expression *size;
-        };
+        FuncTypesec func;
+        ArrayTypespec arr;
+        PointerTypespec ptr;
     };
 };
 
@@ -54,6 +82,12 @@ Typespec* typespec_name(const char *name);
 Typespec* typespec_pointer(Typespec *base);
 Typespec* typespec_array(Typespec *base, Expression *size);
 Typespec* typespec_func(FuncTypesec *func);
+
+
+struct StatementBlock {
+    Statement **statements;
+    size_t num_statements;
+};
 
 enum DeclarationKind {
     DECL_NONE,
@@ -82,10 +116,34 @@ struct FuncParam {
     Typespec *type;
 };
 
+struct EnumDeclaration {
+    EnumItem *items;
+    size_t num_items;
+};
+
+struct AggregateDeclaration {
+    AggregateItem *items;
+    size_t num_items;
+};
+
+struct VarDeclaration {
+    Typespec *type;;
+    Expression *expr;
+};
+
+struct ConstDeclaration {
+    Expression *expr;
+};
+
 struct FuncDeclaration {
     FuncParam *params;
     size_t num_params;
     Typespec *return_type;
+    StatementBlock body;
+};
+
+struct TypedefDeclaration {
+    Typespec *type;
 };
 
 
@@ -93,20 +151,23 @@ struct Declaration {
     DeclarationKind kind;
     const char *name;
     union {
-        struct {
-            EnumItem *enum_items;
-            size_t num_enum_items;
-        };
-        struct {
-            AggregateItem *aggregate_items;
-            size_t num_aggregate_items;
-        };
-        struct {
-            Typespec *type;
-            Expression *expr;
-        };
+        EnumDeclaration enum_delc;
+        AggregateDeclaration agg;
+        VarDeclaration var;
+        ConstDeclaration const_decl;
+        FuncDeclaration func;
+        TypedefDeclaration typedef_decl;
     };
 };
+
+Declaration* declaration_new(DeclarationKind kind, const char *name);
+Declaration* declaration_enum(const char *name, EnumItem *items, size_t num_items);
+Declaration* declaration_struct(const char *name, AggregateItem *items, size_t num_items);
+Declaration* declaration_union(const char *name, AggregateItem *items, size_t num_items);
+Declaration* declaration_var(const char *name, Typespec *type, Expression *expr);
+Declaration* declaration_const(const char *name, Expression *expr);
+Declaration* declaration_func(const char *name, FuncParam *params, size_t num_params, Typespec *ret_type, StatementBlock body);
+Declaration* declaration_typedef(const char *name, Typespec *type);
 
 enum ExpressionKind {
     EXPR_NONE,
@@ -124,49 +185,65 @@ enum ExpressionKind {
     EXPR_TERNARY
 };
 
+struct CompoundExpression {
+    Typespec *type;
+    Expression **args;
+    size_t num_args;
+};
+
+struct CastExpression {
+    Typespec *type;
+    Expression *expr;
+};
+
+struct UnaryExpression {
+    TokenKind op;
+    Expression *operand;
+};
+
+struct BinaryExpression {
+    TokenKind op;
+    Expression *left;
+    Expression *right;
+};
+
+struct TernaryExpression {
+    Expression *cond;
+    Expression *then_ex;
+    Expression *else_ex;
+};
+
+struct CallExpression {
+    Expression *operand;
+    Expression **args;
+    size_t num_args;
+};
+
+struct IndexExpression {
+    Expression *operand;
+    Expression *index;
+};
+
+struct FieldExpression {
+    Expression *operand;
+    const char *name;
+};
+
 struct Expression {
     ExpressionKind kind;
-    TokenKind op;
     union {
         uint64_t int_val;
         double float_val;
         const char *str_val;
         const char *name;
-        //compound
-        struct {
-            Typespec *compound_type;
-            Expression **compound_args;
-            size_t num_compound_args;
-        };
-        //cast
-        struct {
-            Typespec *cast_type;
-            Expression *cast_expr;
-        };
-        //unary
-        struct {
-            Expression *operand;
-            union {
-                struct {
-                    Expression **args;
-                    size_t num_args;
-                };
-                Expression *index;
-                const char *field;
-            };
-        };
-        //binary
-        struct {
-            Expression *left;
-            Expression *right;
-        };
-        //ternary
-        struct {
-            Expression *cond;
-            Expression *then_expr;
-            Expression *else_expr;
-        };
-
+        CompundExpression compound;
+        CastExpression cast;
+        UnaryExpression unary;
+        BinaryExpression binary;
+        TernaryExpression ternary;
+        CallExpression call;
+        IndexExpression index;
+        FieldExpression field;
     };
 };
 
@@ -182,8 +259,7 @@ Expression* expression_ternary(Expression *cond, Expression *then_expr, Expressi
 Expression* expression_call(Expression *operand, Expression **args, size_t num_args);
 Expression* expression_index(Expression *operand, Expression *index);
 Expression* expression_field(Expression *operand, const char *field);
-
-void print_expression(Expression *expr);
+Expression* expression_compound(Typespec *type, Expression **args, size_t num_args);
 
 enum StatementKind {
     STMT_NONE,
@@ -193,59 +269,89 @@ enum StatementKind {
     STMT_BLOCK,
     STMT_IF,
     STMT_FOR,
-    STMT_DO,
+    STMT_WHILE,
+    STMT_DO_WHILE,
     STMT_SWITCH,
     STMT_ASSIGN,
     STMT_AUTO_ASSIGN,
     STMT_EXPR,
 };
 
-struct StatementBlock {
-    Statement **statements;
-    size_t num_statements;
-};
-
 struct ElseIf {
     Expression *cond;
+    StatementBlock body;
+};
+
+struct IfStatement {
+    Expression *cond;
+    StatementBlock then;
+    ElseIf *else_ifs;
+    size_t num_else_ifs;
+    StatementBlock else_body;
+};
+
+struct ForStatement {
+    StatementBlock init;
+    Expression *cond;
+    StatementBlock next;
+    StatementBlock body;
+};
+
+struct WhileStatement {
+    Expression *cond;
+    StatementBlock body;
+};
+
+struct SwitchCase {
+    Expression **expressions;
+    size_t num_expressions;
     StatementBlock *body;
 };
 
-struct Case {
-    Expression **expressions;
-    size_t num_expressions;
-    StatementBlock *block;
+struct SwitchStatement {
+    Expression *expr;
+    SwitchCase *cases;
+    size_t num_cases;
 };
+
+struct AssignStatement {
+    TokenKind op;
+    Expression *left;
+    Expression *right;
+};
+
+struct AutoAssignStatement {
+    const char *name;
+    Expression *init;
+};
+
 
 struct Statement {
     StatementKind kind;
-    Expression *expr;
-    StatementBlock block;
     union {
-        //if
-        struct {
-            ElseIf *else_ifs;
-            size_t num_else_ifs;
-            StatementBlock else_block;
-        };
-        //for
-        struct {
-            StatementBlock *for_init_block;
-            StatementBlock *for_update_block;
-        };
-        //switch
-        struct {
-            Case **cases;
-            size_t num_cases;
-        };
-        //auto assign
-        struct {
-            const char *name;
-        };
-        //assign ops
-        struct {
-            Expression *rexpr;
-        };
+        IfStatement if_stmt;
+        ForStatement for_stmt;
+        WhileStatement while_stmt;
+        SwitchStatement switch_stmt;
+        AssignStatement assign;
+        AutoAssignStatement auto_assign;
+        StatementBlock block;
+        Expression *expr;
     };
 };
 
+Statement* statement_new(StatementKind kind);
+Statement* statement_if(Expression *cond, StatementBlock then, ElseIf *else_ifs, size_t num_else_ifs,
+        StatementBlock else_body);
+Statement* statement_for(StatementBlock init, Expression *cond, StatementBlock next, StatementBlock body);
+Statement* statement_while(Expression *cond, StatementBlock body);
+Statement* statement_do_while(Expression *cond, StatementBlock body);
+Statement* statement_switch(Expression *expr, SwitchCase *cases, size_t num_cases);
+Statement* statement_assign(TokenKind op, Expression *left, Expression *right);
+Statement* statement_auto_assign(const char *name);
+Statement* statement_returm();
+Statement* statement_break();
+Statement* statement_continue();
+Statement* statement_block(StatementBlock block);
+Statement* statement_expr(Expression *expr);
 #endif

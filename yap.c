@@ -83,7 +83,8 @@ void expr_test() {
         expression_field(expression_name("user"), "name"),
         expression_cast(typespec_pointer(typespec_name("float")), expression_name("void_ptr")),
         expression_call(expression_name("sum"), (Expression*[]){expression_int(2), expression_int(5)}, 2),
-        expression_index(expression_field(expression_name("user"), "photos"), expression_int(2))
+        expression_index(expression_field(expression_name("user"), "photos"), expression_int(2)),
+        expression_compound(typespec_name("Vec3"),(Expression*[]){expression_float(0.1), expression_float(1.0), expression_float(-0.5)}, 3)
     };
 
     for (Expression **it = exprs; it != exprs + sizeof(exprs) / sizeof(*exprs) ; it++) {
