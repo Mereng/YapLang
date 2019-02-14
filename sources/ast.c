@@ -170,7 +170,7 @@ Statement* statement_if(Expression *cond, StatementBlock then, ElseIf *else_ifs,
     stmt->if_stmt.then = then;
     stmt->if_stmt.else_ifs = else_ifs;
     stmt->if_stmt.num_else_ifs = num_else_ifs;
-    stmt->if_stmt.else_bodyy= else_body;
+    stmt->if_stmt.else_body = else_body;
     return stmt;
 }
 Statement* statement_for(StatementBlock init, Expression *cond, StatementBlock next, StatementBlock body) {
@@ -206,13 +206,16 @@ Statement* statement_assign(TokenKind op, Expression *left, Expression *right) {
     stmt->assign.right = right;
     return stmt;
 }
-Statement* statement_auto_assign(const char *name) {
+Statement* statement_auto_assign(const char *name, Expression *init) {
     Statement *stmt = statement_new(STMT_AUTO_ASSIGN);
     stmt->auto_assign.name = name;
+    stmt->auto_assign.init = init;
     return stmt;
 }
-Statement* statement_returm() {
-    return statement_new(STMT_RETURN);
+Statement* statement_return(Expression *expr) {
+    Statement *stmt = statement_new(STMT_RETURN);
+    stmt->return_stmt.expr = expr;
+    return stmt;
 }
 Statement* statement_break() {
     return statement_new(STMT_BREAK);

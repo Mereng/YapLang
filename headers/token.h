@@ -2,6 +2,7 @@
 #define YAP_TOKEN_H
 
 typedef enum TokenKind {
+    TOKEN_EOF = 0,
     TOKEN_START = 127,
     TOKEN_INT,
     TOKEN_FLOAT,
@@ -28,7 +29,7 @@ typedef enum TokenKind {
     TOKEN_EQ,
     TOKEN_NOTEQ,
     TOKEN_LTEQ,
-    TOKEN_GREQ
+    TOKEN_GTEQ
 } TokenKind;
 
 typedef enum TokenMod {

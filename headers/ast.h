@@ -4,6 +4,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <token.h>
+#include <stdbool.h>
 
 typedef enum TypespecKind TypespecKind;
 typedef struct FuncTypesec FuncTypesec;
@@ -40,6 +41,7 @@ typedef struct SwitchCase SwitchCase;
 typedef struct SwitchStatement SwitchStatement;
 typedef struct AssignStatement AssignStatement;
 typedef struct AutoAssignStatement AutoAssignStatement;
+typedef struct ReturnStatement ReturnStatement;
 typedef struct Statement Statement;
 typedef struct StatementBlock StatementBlock;
 
@@ -305,7 +307,8 @@ struct WhileStatement {
 struct SwitchCase {
     Expression **expressions;
     size_t num_expressions;
-    StatementBlock *body;
+    StatementBlock body;
+    bool is_default;
 };
 
 struct SwitchStatement {
@@ -325,6 +328,9 @@ struct AutoAssignStatement {
     Expression *init;
 };
 
+struct ReturnStatement {
+    Expression *expr;
+};
 
 struct Statement {
     StatementKind kind;
@@ -335,6 +341,7 @@ struct Statement {
         SwitchStatement switch_stmt;
         AssignStatement assign;
         AutoAssignStatement auto_assign;
+        ReturnStatement return_stmt;
         StatementBlock block;
         Expression *expr;
     };
@@ -348,8 +355,8 @@ Statement* statement_while(Expression *cond, StatementBlock body);
 Statement* statement_do_while(Expression *cond, StatementBlock body);
 Statement* statement_switch(Expression *expr, SwitchCase *cases, size_t num_cases);
 Statement* statement_assign(TokenKind op, Expression *left, Expression *right);
-Statement* statement_auto_assign(const char *name);
-Statement* statement_returm();
+Statement* statement_auto_assign(const char *name, Expression *init);
+Statement* statement_return(Expression *expr);
 Statement* statement_break();
 Statement* statement_continue();
 Statement* statement_block(StatementBlock block);

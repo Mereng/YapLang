@@ -2,7 +2,7 @@
 Token token;
 const char *stream;
 
-uint8_t char_to_digit[256] = {
+uint8_t char_to_digit[] = {
         ['0'] = 0,
         ['1'] = 1,
         ['2'] = 2,
@@ -26,6 +26,7 @@ uint8_t char_to_digit[256] = {
         ['E'] = 14,
         ['F'] = 15
 };
+
 
 void parse_int() {
     uint64_t base = 10;
@@ -278,7 +279,7 @@ void next_token() {
                     stream++;
                 }
             } else if (*stream == '=') {
-                token.kind = TOKEN_GREQ;
+                token.kind = TOKEN_GTEQ;
                 stream++;
             }
             break;
@@ -413,5 +414,5 @@ void lex_test() {
     next_token();
     assert(token.kind == TOKEN_RSHIFT_ASSIGN);
     next_token();
-    assert(token.kind == TOKEN_GREQ);
+    assert(token.kind == TOKEN_GTEQ);
 }

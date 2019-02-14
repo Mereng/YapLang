@@ -93,6 +93,46 @@ void expr_test() {
     }
 }
 
+void statement_test() {
+    Statement *stmts[] = {
+        statement_if(expression_name("isTrue"),
+                (StatementBlock){(Statement*[]) {statement_return(expression_int(54))}, 1},
+                (ElseIf[]){expression_name("isFoo"), (StatementBlock){(Statement*[]){statement_continue()}, 1}}, 1,
+                (StatementBlock){(Statement*[]){statement_auto_assign("bar", expression_float(1.5))}, 1}
+        ),
+        statement_for(
+                (StatementBlock){(Statement*[]){statement_auto_assign("i", expression_int(0))}, 1},
+                expression_binary('<', expression_name("i"), expression_int(10)),
+                (StatementBlock){(Statement*[]){statement_expr(expression_unary(TOKEN_INC, expression_name("i")))}, 1},
+                (StatementBlock){(Statement*[]){statement_expr(expression_unary(TOKEN_ADD_ASSIGN, expression_name("sum")))}, 1}
+        ),
+        statement_while(
+                expression_binary('>', expression_name("j"), expression_name("foo")),
+                (StatementBlock){(Statement*[]){statement_break()}, 1}
+        ),
+        statement_do_while(
+                expression_binary('<', expression_name("j"), expression_name("foo")),
+                (StatementBlock){(Statement*[]){statement_break()}, 1}
+        ),
+        statement_switch(
+                expression_name("kind"),
+                (SwitchCase[]) {
+                        (SwitchCase){
+                                (Expression*[]) {
+                                    expression_str("foo"),
+                                }
+                        }
+                }
+        )
+    };
+
+    for (Statement **it = stmts; it != stmts + sizeof(stmts)/ sizeof(*stmts); it++) {
+        print_statement(*it);
+        printf("\n");
+    }
+}
+
 void ast_test() {
     expr_test();
+    statement_test();
 }
