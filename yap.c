@@ -120,10 +120,21 @@ void statement_test() {
                         (SwitchCase){
                                 (Expression*[]) {
                                     expression_str("foo"),
-                                }
+                                },
+                                1,
+                                (StatementBlock){(Statement*[]){statement_break()}, 1},
+                                false
+                        },
+                        (SwitchCase) {
+                            0,
+                            0,
+                            (StatementBlock){(Statement*[]){statement_continue()}, 1},
+                            true
                         }
-                }
-        )
+                },
+                2
+        ),
+        statement_assign(TOKEN_ADD_ASSIGN, expression_name("foo"), expression_int(56))
     };
 
     for (Statement **it = stmts; it != stmts + sizeof(stmts)/ sizeof(*stmts); it++) {
