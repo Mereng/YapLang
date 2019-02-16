@@ -1,6 +1,67 @@
 #include <token.h>
+
+struct {
+    const char *func_keyword;
+    const char *var_keyword;
+    const char *const_keyword;
+    const char *struct_keyword;
+    const char *union_keyword;
+    const char *typedef_keyword;
+    const char *sizeof_keyword;
+    const char *if_keyword;
+    const char *else_keyword;
+    const char *while_keyword;
+    const char *do_keyword;
+    const char *for_keyword;
+    const char *switch_keyword;
+    const char *case_keyword;
+    const char *default_keyword;
+    const char *break_keyword;
+    const char *return_keyword;
+    const char *continue_keyword;
+    const char *enum_keyword;
+} keywords;
+
+const char **keywords_buf;
+const char *start_keywords;
+const char *end_keywords;
+
+#define INIT_KEYWORD(name) keywords.name##_keyword = str_intern(#name); buf_push(keywords_buf, keywords.name##_keyword)
+
+void keywords_init() {
+    INIT_KEYWORD(func);
+    INIT_KEYWORD(var);
+    INIT_KEYWORD(const);
+    INIT_KEYWORD(struct);
+    INIT_KEYWORD(union);
+    INIT_KEYWORD(typedef);
+    INIT_KEYWORD(sizeof);
+    INIT_KEYWORD(if);
+    INIT_KEYWORD(else);
+    INIT_KEYWORD(while);
+    INIT_KEYWORD(do);
+    INIT_KEYWORD(for);
+    INIT_KEYWORD(switch);
+    INIT_KEYWORD(case);
+    INIT_KEYWORD(default);
+    INIT_KEYWORD(break);
+    INIT_KEYWORD(return);
+    INIT_KEYWORD(continue);
+    INIT_KEYWORD(enum);
+
+    start_keywords = keywords.func_keyword;
+    end_keywords = keywords.enum_keyword;
+}
+
+#undef INIT_KEYWORD
+
+static inline bool is_keyword_str(const char *str) {
+    return start_keywords <= str && str <= end_keywords;
+}
+
 Token token;
 const char *stream;
+
 
 uint8_t char_to_digit[] = {
         ['0'] = 0,
@@ -252,8 +313,8 @@ void next_token() {
             while (isalnum(*stream) || *stream == '_') {
                 stream++;
             }
-            token.kind = TOKEN_NAME;
             token.name = str_intern_range(token.start, stream);
+            token.kind = is_keyword_str(token.name) ? TOKEN_KEYWORD : TOKEN_NAME;
             break;
         case '<':
             token.kind = *stream++;
@@ -283,6 +344,7 @@ void next_token() {
                 stream++;
             }
             break;
+        CASE1('=', '=', TOKEN_EQ)
         CASE1(':', '=', TOKEN_AUTO_ASSIGN)
         CASE1('/', '=', TOKEN_DIV_ASSIGN)
         CASE1('*', '=', TOKEN_MUL_ASSIGN)
@@ -305,6 +367,10 @@ void next_token() {
 
 static inline bool is_token(TokenKind kind) {
     return token.kind == kind;
+}
+
+static inline bool is_keyword(const char *name) {
+    return is_token(TOKEN_KEYWORD) && token.name == name;
 }
 
 static inline bool match_token(TokenKind kind) {
@@ -369,6 +435,16 @@ void print_token(Token token) {
             printf("TOKEN %c\n", token.kind);
             break;
     }
+}
+
+void keywords_test() {
+    keywords_init();
+    assert(is_keyword_str(start_keywords));
+    assert(is_keyword_str(end_keywords));
+    for (const char **it = keywords_buf; it != buf_end(keywords_buf); it++) {
+        assert(is_keyword_str(*it));
+    }
+    assert(!is_keyword_str(str_intern("Lol")));
 }
 
 void lex_test() {

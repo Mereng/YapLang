@@ -46,6 +46,9 @@ typedef struct Statement Statement;
 typedef struct StatementBlock StatementBlock;
 
 
+void* ast_alloc(size_t size);
+void* ast_dup(const void *src, size_t size);
+
 enum TypespecKind {
     TYPESPEC_NONE,
     TYPESPEC_ARRAY,

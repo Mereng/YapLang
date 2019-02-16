@@ -13,13 +13,16 @@
 
 #include "tools.h"
 #include "buf.h"
+#include "alloca.h"
 #include "ast.h"
 #include "fortests.c"
 #include "yap.c"
 #include "lexer.c"
 
+
 int main() {
     buf_test();
+    keywords_test();
     lex_test();
     str_intern_test();
     ast_test();

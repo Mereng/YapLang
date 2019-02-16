@@ -1,5 +1,6 @@
 
 #include <ast.h>
+#include <aalloc.h>
 
 void fatal(const char* fmt, ...) {
     va_list args;
@@ -25,7 +26,8 @@ typedef struct InternStr {
     const char *str;
 } InternStr;
 
-static InternStr *interns;
+ArenaMem strs_arena;
+InternStr *interns;
 
 const char* str_intern_range(const char *start, const char *end) {
     size_t len = end - start;
@@ -36,11 +38,11 @@ const char* str_intern_range(const char *start, const char *end) {
         }
     }
 
-    char *str = malloc(len + 1);
+    char *str = arena_alloc(&strs_arena, len + 1);
     memcpy(str, start, len);
     str[len] = 0;
-
     buf_push(interns, ((InternStr){len, str}));
+
     return str;
 }
 

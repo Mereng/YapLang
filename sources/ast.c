@@ -1,9 +1,30 @@
-#include <ast.h>
 #include <malloc.h>
+#include <memory.h>
 #include <inttypes.h>
 
+
+#include "ast.h"
+#include "aalloc.h"
+
+ArenaMem ast_arena;
+
+void* ast_alloc(size_t size) {
+    void *ptr = arena_alloc(&ast_arena, size);
+    memset(ptr, 0, size);
+    return ptr;
+}
+void* ast_dup(const void *src, size_t size) {
+    if (size == 0) {
+        return NULL;
+    }
+
+    void *ptr = arena_alloc(&ast_arena, size);
+    memcpy(ptr, src, size);
+    return ptr;
+}
+
 Typespec* typespec_new(TypespecKind kind) {
-    Typespec *typespec = calloc(1, sizeof(Typespec));
+    Typespec *typespec = ast_alloc(sizeof(Typespec));
     typespec->kind = kind;
     return typespec;
 }
@@ -30,7 +51,7 @@ Typespec* typespec_func(FuncTypesec *func) {
 }
 
 Declaration* declaration_new(DeclarationKind kind, const char *name) {
-    Declaration *decl = calloc(1, sizeof(Declaration));
+    Declaration *decl = ast_alloc(sizeof(Declaration));
     decl->kind = kind;
     decl->name = name;
     return decl;
@@ -80,7 +101,7 @@ Declaration* declaration_typedef(const char *name, Typespec *type) {
 }
 
 Expression* expression_new(ExpressionKind kind) {
-    Expression *expr = calloc(1, sizeof(Expression));
+    Expression *expr = ast_alloc(sizeof(Declaration));
     expr->kind = kind;
     return expr;
 }
@@ -159,7 +180,7 @@ Expression* expression_compound(Typespec *type, Expression **args, size_t num_ar
 }
 
 Statement* statement_new(StatementKind kind) {
-    Statement *stmt = calloc(1, sizeof(Statement));
+    Statement *stmt = ast_alloc(sizeof(Statement));
     stmt->kind = kind;
     return stmt;
 }

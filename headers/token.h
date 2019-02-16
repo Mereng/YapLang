@@ -29,7 +29,8 @@ typedef enum TokenKind {
     TOKEN_EQ,
     TOKEN_NOTEQ,
     TOKEN_LTEQ,
-    TOKEN_GTEQ
+    TOKEN_GTEQ,
+    TOKEN_KEYWORD
 } TokenKind;
 
 typedef enum TokenMod {
