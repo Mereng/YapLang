@@ -31,6 +31,8 @@ typedef struct CastExpression CastExpression;
 typedef struct CallExpression CallExpression;
 typedef struct IndexExpression IndexExpression;
 typedef struct FieldExpression FieldExpression;
+typedef enum SizeofKind SizeofKind;
+typedef struct SizeofExpression SizeofExpression;
 typedef struct Expression Expression;
 typedef enum StatementKind StatementKind;
 typedef struct ElseIf ElseIf;
@@ -86,7 +88,7 @@ Typespec* typespec_new(TypespecKind kind);
 Typespec* typespec_name(const char *name);
 Typespec* typespec_pointer(Typespec *base);
 Typespec* typespec_array(Typespec *base, Expression *size);
-Typespec* typespec_func(Typespec **args, size_t num_args, Typespec *ret)
+Typespec* typespec_func(Typespec **args, size_t num_args, Typespec *ret);
 
 
 struct StatementBlock {
@@ -187,7 +189,8 @@ enum ExpressionKind {
     EXPR_COMPOUND,
     EXPR_UNARY,
     EXPR_BINARY,
-    EXPR_TERNARY
+    EXPR_TERNARY,
+    EXPR_SIZEOF
 };
 
 struct CompoundExpression {
@@ -234,6 +237,19 @@ struct FieldExpression {
     const char *name;
 };
 
+enum SizeofKind {
+    SIZEOF_TYPE,
+    SIZEOF_EXPR
+};
+
+struct SizeofExpression {
+    SizeofKind kind;
+    union {
+        Typespec *type;
+        Expression *expr;
+    };
+};
+
 struct Expression {
     ExpressionKind kind;
     union {
@@ -249,6 +265,7 @@ struct Expression {
         CallExpression call;
         IndexExpression index;
         FieldExpression field;
+        SizeofExpression size_of;
     };
 };
 
@@ -265,6 +282,8 @@ Expression* expression_call(Expression *operand, Expression **args, size_t num_a
 Expression* expression_index(Expression *operand, Expression *index);
 Expression* expression_field(Expression *operand, const char *field);
 Expression* expression_compound(Typespec *type, Expression **args, size_t num_args);
+Expression* expression_sizeof_type(Typespec *type);
+Expression* expression_sizeof_expr(Expression *sizeof_expr);
 
 enum StatementKind {
     STMT_NONE,

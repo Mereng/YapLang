@@ -100,6 +100,13 @@ void print_expression(Expression *expr) {
             printf(" : ");
             print_expression(expr->ternary.else_ex);
             printf(")");
+        case EXPR_SIZEOF:
+            printf("(sizeof ");
+            if (expr->size_of.kind == SIZEOF_TYPE) {
+                print_type(expr->size_of.type);
+            } else {
+                print_expression(expr->size_of.expr);
+            }
         default:
             break;
     }

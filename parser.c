@@ -20,6 +20,58 @@ Expression* parse_expression_compound(Typespec *type) {
     return expression_compound(type, ast_dup(args, buf_sizeof(args)), buf_len(args));
 }
 
+Expression* parse_expression_operand() {
+    if (is_token(TOKEN_INT)) {
+        uint64_t val = token.int_val;
+        next_token();
+        return expression_int(val);
+    } else if (is_token(TOKEN_FLOAT)) {
+        double val = token.float_val;
+        next_token();
+        return expression_float(val);
+    } else if (is_token(TOKEN_STR)) {
+        const char *val = token.str_val;
+        next_token();
+        return expression_str(val);
+    } else if (is_token(TOKEN_NAME)) {
+        const char *name = token.name;
+        next_token();
+        if (is_token('{')) {
+            return parse_expression_compound(typespec_name(name));
+        } else {
+            return expression_name(name);
+        }
+    } else if (is_token('{')) {
+        return parse_expression_compound(NULL);
+    } else if (match_token('(')) {
+        if (is_token(':')) {
+            Typespec *type = parse_type();
+            expect_token(')');
+            return parse_expression_compound(type);
+        } else {
+            Expression *expr = parse_expression();
+            expect_token(')');
+            return expr;
+        }
+    } else if(match_keywortd(keywords.sizeof_keyword)) {
+        expect_token('(');
+        if (match_token(':')) {
+            Typespec *type = parse_type();
+            expect_token(')');
+            return expression_sizeof_type(type);
+        } else {
+            Expression *expr = parse_expression();
+            expect_token(')');
+            return expression_sizeof_expr(expr);
+        }
+    } else {
+        char buf[256];
+        copy_kind_name(buf, 256, token.kind);
+        fatal("Unexpected token %s in expression", buf);
+        return NULL;
+    }
+}
+
 Expression* parse_expression_ternary() {
     Expression *expr =
 }
