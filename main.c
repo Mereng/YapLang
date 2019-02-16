@@ -18,6 +18,7 @@
 #include "fortests.c"
 #include "yap.c"
 #include "lexer.c"
+#include "parser.c"
 
 
 int main() {

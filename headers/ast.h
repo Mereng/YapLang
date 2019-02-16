@@ -7,7 +7,7 @@
 #include <stdbool.h>
 
 typedef enum TypespecKind TypespecKind;
-typedef struct FuncTypesec FuncTypesec;
+typedef struct FuncTypespec FuncTypespec;
 typedef struct PointerTypespec PointerTypespec;
 typedef struct ArrayTypespec ArrayTypespec;
 typedef struct Typespec Typespec;
@@ -57,7 +57,7 @@ enum TypespecKind {
     TYPESPEC_FUNC
 };
 
-struct FuncTypesec {
+struct FuncTypespec {
     Typespec **args_types;
     size_t num_args_types;
     Typespec *return_type;
@@ -76,7 +76,7 @@ struct Typespec {
     TypespecKind kind;
     union {
         const char *name;
-        FuncTypesec func;
+        FuncTypespec func;
         ArrayTypespec arr;
         PointerTypespec ptr;
     };
@@ -86,7 +86,7 @@ Typespec* typespec_new(TypespecKind kind);
 Typespec* typespec_name(const char *name);
 Typespec* typespec_pointer(Typespec *base);
 Typespec* typespec_array(Typespec *base, Expression *size);
-Typespec* typespec_func(FuncTypesec *func);
+Typespec* typespec_func(Typespec **args, size_t num_args, Typespec *ret)
 
 
 struct StatementBlock {

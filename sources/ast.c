@@ -44,9 +44,11 @@ Typespec* typespec_array(Typespec *base, Expression *size) {
     typespec->arr.size = size;
     return typespec;
 }
-Typespec* typespec_func(FuncTypesec *func) {
+Typespec* typespec_func(Typespec **args, size_t num_args, Typespec *ret) {
     Typespec *typespec = typespec_new(TYPESPEC_FUNC);
-    typespec->func = *func;
+    typespec->func.args_types = args;
+    typespec->func.num_args_types = num_args;
+    typespec->func.return_type = ret;
     return typespec;
 }
 

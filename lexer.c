@@ -174,7 +174,7 @@ void parse_float() {
     token.float_val = val;
 }
 
-char escape_to_char[256] = {
+char escape_to_char[] = {
         ['n'] = '\n',
         ['t'] = '\t',
         ['v'] = '\v',
@@ -379,6 +379,15 @@ static inline bool match_token(TokenKind kind) {
         return true;
     }
     return false;
+}
+
+static inline bool match_keywortd(const char *name) {
+    if (is_keyword(name)) {
+        next_token();
+        return true;
+    } else {
+        return false;
+    }
 }
 
 static inline bool expect_token(TokenKind kind) {
