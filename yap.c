@@ -103,9 +103,9 @@ void statement_test() {
                 (StatementBlock){(Statement*[]){statement_auto_assign("bar", expression_float(1.5))}, 1}
         ),
         statement_for(
-                (StatementBlock){(Statement*[]){statement_auto_assign("i", expression_int(0))}, 1},
+                (Statement*){statement_auto_assign("i", expression_int(0))},
                 expression_binary('<', expression_name("i"), expression_int(10)),
-                (StatementBlock){(Statement*[]){statement_expr(expression_unary(TOKEN_INC, expression_name("i")))}, 1},
+                (Statement*){statement_expr(expression_unary(TOKEN_INC, expression_name("i")))},
                 (StatementBlock){(Statement*[]){statement_expr(expression_unary(TOKEN_ADD_ASSIGN, expression_name("sum")))}, 1}
         ),
         statement_while(

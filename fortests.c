@@ -176,11 +176,11 @@ void print_statement(Statement *stmt) {
             break;
         case STMT_FOR:
             printf("(for ");
-            print_statement_block(stmt->for_stmt.init, true);
+            print_statement(stmt->for_stmt.init);
             printf(";");
             print_expression(stmt->for_stmt.cond);
             printf(";");
-            print_statement_block(stmt->for_stmt.next, true);
+            print_statement(stmt->for_stmt.next);
             printf("\n");
             print_statement_block(stmt->for_stmt.body, false);
             printf(")");

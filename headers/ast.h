@@ -109,7 +109,7 @@ enum DeclarationKind {
 
 struct EnumItem {
     const char *name;
-    Typespec *type;
+    Expression *init;
 };
 
 struct AggregateItem {
@@ -315,9 +315,9 @@ struct IfStatement {
 };
 
 struct ForStatement {
-    StatementBlock init;
+    Statement *init;
     Expression *cond;
-    StatementBlock next;
+    Statement *next;
     StatementBlock body;
 };
 
@@ -372,7 +372,7 @@ struct Statement {
 Statement* statement_new(StatementKind kind);
 Statement* statement_if(Expression *cond, StatementBlock then, ElseIf *else_ifs, size_t num_else_ifs,
         StatementBlock else_body);
-Statement* statement_for(StatementBlock init, Expression *cond, StatementBlock next, StatementBlock body);
+Statement* statement_for(Statement *init, Expression *cond, Statement *next, StatementBlock body);
 Statement* statement_while(Expression *cond, StatementBlock body);
 Statement* statement_do_while(Expression *cond, StatementBlock body);
 Statement* statement_switch(Expression *expr, SwitchCase *cases, size_t num_cases);

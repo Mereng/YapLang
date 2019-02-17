@@ -209,7 +209,7 @@ Statement* statement_if(Expression *cond, StatementBlock then, ElseIf *else_ifs,
     stmt->if_stmt.else_body = else_body;
     return stmt;
 }
-Statement* statement_for(StatementBlock init, Expression *cond, StatementBlock next, StatementBlock body) {
+Statement* statement_for(Statement *init, Expression *cond, Statement *next, StatementBlock body) {
     Statement *stmt = statement_new(STMT_FOR);
     stmt->for_stmt.init = init;
     stmt->for_stmt.cond = cond;
