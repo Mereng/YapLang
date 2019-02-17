@@ -76,6 +76,12 @@ Declaration* declaration_union(const char *name, AggregateItem *items, size_t nu
     decl->agg.num_items = num_items;
     return decl;
 }
+Declaration* declaration_aggregate(DeclarationKind kind, const char *name, AggregateItem *items, size_t num_items) {
+    Declaration *decl = declaration_new(kind, name);
+    decl->agg.items = items;
+    decl->agg.num_items = num_items;
+    return decl;
+}
 Declaration* declaration_var(const char *name, Typespec *type, Expression *expr) {
     Declaration *decl = declaration_new(DECL_VAR, name);
     decl->var.type = type;

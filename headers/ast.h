@@ -171,6 +171,7 @@ Declaration* declaration_new(DeclarationKind kind, const char *name);
 Declaration* declaration_enum(const char *name, EnumItem *items, size_t num_items);
 Declaration* declaration_struct(const char *name, AggregateItem *items, size_t num_items);
 Declaration* declaration_union(const char *name, AggregateItem *items, size_t num_items);
+Declaration* declaration_aggregate(DeclarationKind kind, const char *name, AggregateItem *items, size_t num_items);
 Declaration* declaration_var(const char *name, Typespec *type, Expression *expr);
 Declaration* declaration_const(const char *name, Expression *expr);
 Declaration* declaration_func(const char *name, FuncParam *params, size_t num_params, Typespec *ret_type, StatementBlock body);

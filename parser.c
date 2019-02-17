@@ -54,7 +54,7 @@ Expression* parse_expression_operand() {
             expect_token(')');
             return expr;
         }
-    } else if(match_keywortd(keywords.sizeof_keyword)) {
+    } else if(match_keyword(keywords.sizeof_keyword)) {
         expect_token('(');
         if (match_token(':')) {
             Typespec *type = parse_type();
@@ -203,10 +203,12 @@ Typespec *parse_type_base() {
         const char *name = token.name;
         next_token();
         return typespec_name(name);
-    } else if (match_keywortd(keywords.func_keyword)) {
+    } else if (match_keyword(keywords.func_keyword)) {
 
     } else if (match_token('(')) {
-        return parse_type();
+        Typespec *type = parse_type();
+        expect_token(')');
+        return type;
     } else {
         char buf[256];
         copy_kind_name(buf, 256, token.kind);
@@ -271,8 +273,8 @@ Statement* parse_statement_if() {
     StatementBlock else_block = {0};
     ElseIf *else_ifs = NULL;
 
-    while (match_keywortd(keywords.else_keyword)) {
-        if (!match_keywortd(keywords.if_keyword)) {
+    while (match_keyword(keywords.else_keyword)) {
+        if (!match_keyword(keywords.if_keyword)) {
             else_block = parse_statement_block();
             break;
         }
@@ -313,12 +315,10 @@ Statement* parse_statement_while() {
 
 Statement* parse_statement_do_while() {
     StatementBlock block = parse_statement_block();
-    if (!match_keywortd(keywords.while_keyword)) {
+    if (!match_keyword(keywords.while_keyword)) {
         fatal("Expected 'while' after 'do' block");
         return NULL;
     }
-
-    Expression *cond = parse_brackets_expression();
     Statement *stmt = statement_do_while(parse_brackets_expression(), block);
     expect_token(';');
     return stmt;
@@ -328,7 +328,7 @@ SwitchCase parse_statement_switch_case() {
     Expression **exprs = NULL;
     bool is_default = false;
     while (is_keyword(keywords.case_keyword) || is_keyword(keywords.default_keyword)) {
-        if (match_keywortd(keywords.case_keyword)) {
+        if (match_keyword(keywords.case_keyword)) {
             buf_push(exprs, parse_expression());
         } else {
             next_token();
@@ -360,24 +360,24 @@ Statement* parse_statement_switch() {
 }
 
 Statement* parse_statement() {
-    if (match_keywortd(keywords.if_keyword)) {
+    if (match_keyword(keywords.if_keyword)) {
         return parse_statement_if();
-    } else if (match_keywortd(keywords.for_keyword)) {
+    } else if (match_keyword(keywords.for_keyword)) {
         return parse_statement_for();
-    } else if (match_keywortd(keywords.while_keyword)) {
+    } else if (match_keyword(keywords.while_keyword)) {
         return parse_statement_while();
-    } else if (match_keywortd(keywords.do_keyword)) {
+    } else if (match_keyword(keywords.do_keyword)) {
         return parse_statement_do_while();
-    } else if (match_keywortd(keywords.switch_keyword)) {
+    } else if (match_keyword(keywords.switch_keyword)) {
         return parse_statement_switch();
-    } else if (match_keywortd(keywords.return_keyword)) {
+    } else if (match_keyword(keywords.return_keyword)) {
         Statement *stmt = statement_return(parse_expression());
         expect_token(';');
         return stmt;
-    } else if (match_keywortd(keywords.break_keyword)) {
+    } else if (match_keyword(keywords.break_keyword)) {
         expect_token(';');
         return statement_break();
-    } else if (match_keywortd(keywords.continue_keyword)) {
+    } else if (match_keyword(keywords.continue_keyword)) {
         expect_token(';');
         return statement_continue();
     } else if (is_token('{')) {
@@ -412,6 +412,60 @@ Declaration* parse_declaration_enum() {
     return declaration_enum(name, ast_dup(items, buf_sizeof(items)), buf_len(items));
 }
 
+AggregateItem parse_declaration_aggregate_item() {
+    const char **names = NULL;
+    buf_push(names, parse_name());
+    while (match_token(',')) {
+        buf_push(names, parse_name());
+    }
+    expect_token(':');
+    Typespec *type = parse_type();
+    expect_token(';');
+    return (AggregateItem){ast_dup(names, buf_sizeof(names)), buf_len(names), type};
+}
+
+Declaration* parse_declaration_aggregate(DeclarationKind kind) {
+    const char *name = parse_name();
+    expect_token('{');
+    AggregateItem *items = NULL;
+    while (!is_token(TOKEN_EOF) && !is_token('}')) {
+        buf_push(items, parse_declaration_aggregate_item());
+    }
+    expect_token('}');
+    return declaration_aggregate(kind, name, ast_dup(items, buf_sizeof(items)), buf_len(items));
+}
+
+Declaration* parse_declaration_var() {
+    const char *name = parse_name();
+    if (match_token('=')) {
+        return declaration_var(name, NULL, parse_expression());
+    } else if (match_token(':')) {
+        Typespec *type = parse_type();
+        Expression *expr = NULL;
+        if (match_token('=')) {
+            expr = parse_expression();
+        }
+        return declaration_var(name, type, expr);
+    } else {
+        char buf[256];
+        copy_kind_name(buf, 256, token.kind);
+        fatal("Expected : or = after var, got %s", buf);
+        return NULL;
+    }
+}
+
+Declaration* parse_declaration_const() {
+    const char *name = parse_name();
+    expect_token('=');
+    return declaration_const(name, parse_expression());
+}
+
+Declaration* parse_declaration_typedef() {
+    const char *name = parse_name();
+    expect_token('=');
+    return declaration_typedef(name, parse_type());
+}
+
 FuncParam parse_declaration_func_param() {
     const char *name = parse_name();
     expect_token(':');
@@ -439,23 +493,36 @@ Declaration* parse_declaration_func() {
 }
 
 Declaration* parse_declaration() {
-    if (match_keywortd(keywords.enum_keyword)) {
+    if (match_keyword(keywords.enum_keyword)) {
         return parse_declaration_enum();
-    } else if (match_keywortd(keywords.struct_keyword)) {
-
-    } else if (match_keywortd(keywords.union_keyword)) {
-
-    } else if (match_keywortd(keywords.var_keyword)) {
-
-    } else if (match_keywortd(keywords.const_keyword)) {
-
-    } else if (match_keywortd(keywords.typedef_keyword)) {
-
-    } else if (match_keywortd(keywords.func_keyword)) {
+    } else if (match_keyword(keywords.struct_keyword)) {
+        return parse_declaration_aggregate(DECL_STRUCT);
+    } else if (match_keyword(keywords.union_keyword)) {
+        return parse_declaration_aggregate(DECL_UNION);
+    } else if (match_keyword(keywords.var_keyword)) {
+        return parse_declaration_var();
+    } else if (match_keyword(keywords.const_keyword)) {
+        return parse_declaration_const();
+    } else if (match_keyword(keywords.typedef_keyword)) {
+        return parse_declaration_typedef();
+    } else if (match_keyword(keywords.func_keyword)) {
         return parse_declaration_func();
     } else {
         char buf[256];
         copy_kind_name(buf, 256, token.kind);
         fatal("Expected declaration keyword, got %s ", buf);
+    }
+}
+
+void parser_test() {
+    const char *code[] = {
+            "func fib(n:int):int {if (n == 0) { return 0; } else if (n == 1) { return 1; } else { return fib(n - 1) + fib(n - 2); } }"
+    };
+
+    for (const char **it = code; it != code + sizeof(code) / sizeof(*code); it++) {
+        init_stream(*it);
+        Declaration *d = parse_declaration();
+        print_declaration(d);
+        printf("\n");
     }
 }

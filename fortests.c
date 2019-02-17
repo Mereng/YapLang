@@ -251,3 +251,30 @@ void print_statement(Statement *stmt) {
             break;
     }
 }
+
+void print_declaration(Declaration *d) {
+    switch (d->kind) {
+        case DECL_FUNC:
+            printf("(func %s (", d->name);
+            for (FuncParam *it = d->func.params; it != d->func.params + d->func.num_params ; it++) {
+                printf(" %s ", it->name);
+                print_type(it->type);
+            }
+            printf(") ");
+            if (d->func.return_type) {
+                print_type(d->func.return_type);
+            }
+            printf("\n");
+            print_statement_block(d->func.body, false);
+            printf(")");
+            break;
+        case DECL_VAR:
+        case DECL_CONST:
+        case DECL_STRUCT:
+        case DECL_UNION:
+        case DECL_ENUM:
+        case DECL_TYPEDEF:
+        default:
+            return;
+    }
+}

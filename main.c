@@ -27,5 +27,6 @@ int main() {
     lex_test();
     str_intern_test();
     ast_test();
+    parser_test();
     return 0;
 }

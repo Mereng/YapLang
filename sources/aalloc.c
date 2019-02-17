@@ -32,3 +32,10 @@ void* arena_alloc(ArenaMem *arena, size_t size) {
     assert(arena->ptr <= arena->end);
     return ptr;
 }
+
+void arena_free(ArenaMem *arena) {
+    for (char **it = arena->blocks; it != buf_end(arena->blocks); it++) {
+        free(*it);
+    }
+    buf_free(arena->blocks);
+}

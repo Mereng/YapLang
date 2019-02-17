@@ -381,7 +381,7 @@ static inline bool match_token(TokenKind kind) {
     return false;
 }
 
-static inline bool match_keywortd(const char *name) {
+static inline bool match_keyword(const char *name) {
     if (is_keyword(name)) {
         next_token();
         return true;
@@ -400,7 +400,7 @@ static inline bool expect_token(TokenKind kind) {
     }
 }
 
-const int copy_kind_name(char *buf, size_t size,TokenKind kind) {
+int copy_kind_name(char *buf, size_t size,TokenKind kind) {
     int n;
     switch (kind) {
         case TOKEN_INT:
