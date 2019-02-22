@@ -1,3 +1,9 @@
+int indent = 0;
+
+void printnl() {
+    printf("\n%*c", 5*indent, '\t');
+}
+
 void print_expression(Expression *expr);
 void print_type(Typespec *type) {
     switch (type->kind) {
@@ -48,7 +54,11 @@ void print_expression(Expression *expr) {
             break;
         case EXPR_COMPOUND:
             printf("(compound ");
-            print_type(expr->compound.type);
+            if (expr->compound.type) {
+                print_type(expr->compound.type);
+            } else {
+                printf("nil");
+            }
             for (Expression **it = expr->compound.args; it != expr->compound.args + expr->compound.num_args; it++) {
                 printf(" ");
                 print_expression(*it);
@@ -64,6 +74,7 @@ void print_expression(Expression *expr) {
             printf("(call ");
             print_expression(expr->call.operand);
             for (Expression **it = expr->call.args; it != expr->call.num_args + expr->call.args; it++){
+                printf(" ");
                 print_expression(*it);
             }
             printf(")");
@@ -81,32 +92,36 @@ void print_expression(Expression *expr) {
             printf(" %s)", expr->field.name);
             break;
         case EXPR_UNARY:
-            printf("(%c ", expr->unary.op);
+            printf("(%s ", token_kind_names[expr->unary.op]);
             print_expression(expr->unary.operand);
             printf(")");
             break;
         case EXPR_BINARY:
-            printf("(%c ", expr->binary.op);
+            printf("(%s ", token_kind_names[expr->binary.op]);
             print_expression(expr->binary.left);
             printf(" ");
             print_expression(expr->binary.right);
             printf(")");
             break;
         case EXPR_TERNARY:
-            printf("( ");
+            printf("(");
             print_expression(expr->ternary.cond);
             printf(" ? ");
             print_expression(expr->ternary.then_ex);
             printf(" : ");
             print_expression(expr->ternary.else_ex);
             printf(")");
-        case EXPR_SIZEOF:
-            printf("(sizeof ");
-            if (expr->size_of.kind == SIZEOF_TYPE) {
-                print_type(expr->size_of.type);
-            } else {
-                print_expression(expr->size_of.expr);
-            }
+            break;
+        case EXPR_SIZEOF_TYPE:
+            printf("(sizeof type ");
+            print_type(expr->size_of_type);
+            printf(")");
+            break;
+        case EXPR_SIZEOF_EXPR:
+            printf("(sizeof expr");
+            print_expression(expr->size_of_expr);
+            printf(")");
+            break;
         default:
             break;
     }
@@ -114,63 +129,36 @@ void print_expression(Expression *expr) {
 
 void print_statement(Statement *stmt);
 
-void print_statement_block(StatementBlock block, bool single_line) {
+void print_statement_block(StatementBlock block) {
     for (Statement **it = block.statements; it != block.statements + block.num_statements; it++) {
-        if (!single_line)
-            printf("\t");
+        printnl();
         print_statement(*it);
-        if (single_line)
-            printf(" ");
-        else
-            printf("\n");
     }
 }
-
-const char *token_kind_names[] = {
-        [TOKEN_EOF] = "EOF",
-        [TOKEN_INT] = "int",
-        [TOKEN_FLOAT] = "float",
-        [TOKEN_STR] = "string",
-        [TOKEN_NAME] = "name",
-        [TOKEN_LSHIFT] = "<<",
-        [TOKEN_RSHIFT] = ">>",
-        [TOKEN_EQ] = "==",
-        [TOKEN_NOTEQ] = "!=",
-        [TOKEN_LTEQ] = "<=",
-        [TOKEN_GTEQ] = ">=",
-        [TOKEN_AND] = "&&",
-        [TOKEN_OR] = "||",
-        [TOKEN_INC] = "++",
-        [TOKEN_DEC] = "--",
-        [TOKEN_AUTO_ASSIGN] = ":=",
-        [TOKEN_ADD_ASSIGN] = "+=",
-        [TOKEN_SUB_ASSIGN] = "-=",
-        [TOKEN_OR_ASSIGN] = "|=",
-        [TOKEN_LSHIFT_ASSIGN] = "<<=",
-        [TOKEN_RSHIFT_ASSIGN] = ">>=",
-        [TOKEN_AND_ASSIGN] = "&=",
-        [TOKEN_XOR_ASSIGN] = "^=",
-        [TOKEN_DIV_ASSIGN] = "/=",
-        [TOKEN_MOD_ASSIGN] = "%=",
-};
 
 void print_statement(Statement *stmt) {
     switch (stmt->kind) {
         case STMT_IF:
             printf("(if ");
             print_expression(stmt->if_stmt.cond);
-            printf("\n");
-            print_statement_block(stmt->if_stmt.then, false);
+            indent++;
+            print_statement_block(stmt->if_stmt.then);
+            indent--;
             for (ElseIf *it = stmt->if_stmt.else_ifs; it != stmt->if_stmt.else_ifs + stmt->if_stmt.num_else_ifs; it++) {
+                printnl();
                 printf("elseif ");
                 print_expression(it->cond);
-                printf("\n");
-                print_statement_block(it->body, false);
+                indent++;
+                print_statement_block(it->body);
+                indent--;
             }
 
             if (stmt->if_stmt.else_body.num_statements > 0) {
-                printf("else\n");
-                print_statement_block(stmt->if_stmt.else_body, false);
+                printnl();
+                printf("else ");
+                indent++;
+                print_statement_block(stmt->if_stmt.else_body);
+                indent--;
             }
             printf(")");
             break;
@@ -181,29 +169,32 @@ void print_statement(Statement *stmt) {
             print_expression(stmt->for_stmt.cond);
             printf(";");
             print_statement(stmt->for_stmt.next);
-            printf("\n");
-            print_statement_block(stmt->for_stmt.body, false);
+            indent++;
+            print_statement_block(stmt->for_stmt.body);
+            indent--;
             printf(")");
             break;
         case STMT_WHILE:
             printf("(while ");
             print_expression(stmt->while_stmt.cond);
-            printf("\n");
-            print_statement_block(stmt->while_stmt.body, false);
+            indent++;
+            print_statement_block(stmt->while_stmt.body);
+            indent--;
             printf(")");
             break;
         case STMT_DO_WHILE:
             printf("(do while ");
             print_expression(stmt->while_stmt.cond);
-            printf("\n");
-            print_statement_block(stmt->while_stmt.body, false);
+            indent++;
+            print_statement_block(stmt->while_stmt.body);
+            indent--;
             printf(")");
             break;
         case STMT_SWITCH:
             printf("(switch ");
             print_expression(stmt->switch_stmt.expr);
             for (SwitchCase *it = stmt->switch_stmt.cases; it != stmt->switch_stmt.cases + stmt->switch_stmt.num_cases; it++) {
-                printf("\n");
+                printnl();
                 printf("(case ");
                 if (it->is_default) {
                     printf("default ");
@@ -213,16 +204,19 @@ void print_statement(Statement *stmt) {
                     printf(" ");
                     print_expression(*jt);
                 }
-                printf("\n");
-                print_statement_block(it->body, false);
+                indent++;
+                print_statement_block(it->body);
+                indent--;
             }
             printf(")");
             break;
         case STMT_ASSIGN:
             printf("(%s ", token_kind_names[stmt->assign.op]);
             print_expression(stmt->assign.left);
-            printf(" ");
-            print_expression(stmt->assign.right);
+            if (stmt->assign.right) {
+                printf(" ");
+                print_expression(stmt->assign.right);
+            }
             printf(")");
             break;
         case STMT_AUTO_ASSIGN:
@@ -231,7 +225,9 @@ void print_statement(Statement *stmt) {
             printf(")");
             break;
         case STMT_BLOCK:
-            print_statement_block(stmt->block, false);
+            indent++;
+            print_statement_block(stmt->block);
+            indent--;
             break;
         case STMT_EXPR:
             print_expression(stmt->expr);
@@ -252,6 +248,17 @@ void print_statement(Statement *stmt) {
     }
 }
 
+void print_declaration_agg(Declaration *d) {
+    for (AggregateItem *it = d->agg.items; it != d->agg.items + d->agg.num_items; it++) {
+        printnl();
+        printf("(");
+        print_type(it->type);
+        for (const char **name = it->names; name != it->names + it->num_names; name++) {
+            printf(" %s", *name);
+        }
+        printf(")");
+    }
+}
 void print_declaration(Declaration *d) {
     switch (d->kind) {
         case DECL_FUNC:
@@ -264,17 +271,163 @@ void print_declaration(Declaration *d) {
             if (d->func.return_type) {
                 print_type(d->func.return_type);
             }
-            printf("\n");
-            print_statement_block(d->func.body, false);
+            indent++;
+            print_statement_block(d->func.body);
+            indent--;
             printf(")");
             break;
         case DECL_VAR:
+            printf("(var %s ", d->name);
+            if (d->var.type) {
+                print_type(d->var.type);
+            } else {
+                printf("nil");
+            }
+            printf(" ");
+            print_expression(d->var.expr);
+            printf(")");
+            break;
         case DECL_CONST:
+            printf("(const %s ", d->name);
+            print_expression(d->const_decl.expr);
+            printf(")");
+            break;
         case DECL_STRUCT:
+            printf("(struct %s ", d->name);
+            indent++;
+            print_declaration_agg(d);;
+            indent--;
+            printf(")");
+            break;
         case DECL_UNION:
+            printf("(union %s ", d->name);
+            indent++;
+            print_declaration_agg(d);;
+            indent--;
+            printf(")");
+            break;
         case DECL_ENUM:
+            printf("(enum %s", d->name);
+            indent++;
+            for (EnumItem *it = d->enum_delc.items; it != d->enum_delc.items + d->enum_delc.num_items; it++) {
+                printnl();
+                printf("(%s ", it->name);
+                if (it->init) {
+                    print_expression(it->init);
+                }  else {
+                    printf("nil");
+                }
+                printf(")");
+            }
+            indent--;
+            printf(")");
+            break;
         case DECL_TYPEDEF:
+            printf("(typedef %s ", d->name);
+            print_type(d->typedef_decl.type);
+            printf(")");
+            break;
         default:
             return;
     }
 }
+
+
+
+void expr_test() {
+    Expression *exprs[] = {
+            expression_unary(TOKEN_SUB, expression_float(3.14)),
+            expression_binary(TOKEN_DIV, expression_int(5), expression_int(10)),
+            expression_ternary(expression_name("isTrue"), expression_str("yes"), expression_str("no")),
+            expression_field(expression_name("user"), "name"),
+            expression_cast(typespec_pointer(typespec_name("float")), expression_name("void_ptr")),
+            expression_call(expression_name("sum"), (Expression*[]){expression_int(2), expression_int(5)}, 2),
+            expression_index(expression_field(expression_name("user"), "photos"), expression_int(2)),
+            expression_compound(typespec_name("Vec3"),(Expression*[]){expression_float(0.1), expression_float(1.0), expression_float(-0.5)}, 3)
+    };
+
+    for (Expression **it = exprs; it != exprs + sizeof(exprs) / sizeof(*exprs) ; it++) {
+        print_expression(*it);
+        printf("\n");
+    }
+}
+
+void statement_test() {
+    Statement *stmts[] = {
+            statement_if(expression_name("isTrue"),
+                         (StatementBlock){(Statement*[]) {statement_return(expression_int(54))}, 1},
+                         (ElseIf[]){expression_name("isFoo"), (StatementBlock){(Statement*[]){statement_continue()}, 1}}, 1,
+                         (StatementBlock){(Statement*[]){statement_auto_assign("bar", expression_float(1.5))}, 1}
+            ),
+            statement_for(
+                    (Statement*){statement_auto_assign("i", expression_int(0))},
+                    expression_binary('<', expression_name("i"), expression_int(10)),
+                    (Statement*){statement_expr(expression_unary(TOKEN_INC, expression_name("i")))},
+                    (StatementBlock){(Statement*[]){statement_expr(expression_unary(TOKEN_ADD_ASSIGN, expression_name("sum")))}, 1}
+            ),
+            statement_while(
+                    expression_binary('>', expression_name("j"), expression_name("foo")),
+                    (StatementBlock){(Statement*[]){statement_break()}, 1}
+            ),
+            statement_do_while(
+                    expression_binary('<', expression_name("j"), expression_name("foo")),
+                    (StatementBlock){(Statement*[]){statement_break()}, 1}
+            ),
+            statement_switch(
+                    expression_name("kind"),
+                    (SwitchCase[]) {
+                            (SwitchCase){
+                                    (Expression*[]) {
+                                            expression_str("foo"),
+                                    },
+                                    1,
+                                    (StatementBlock){(Statement*[]){statement_break()}, 1},
+                                    false
+                            },
+                            (SwitchCase) {
+                                    0,
+                                    0,
+                                    (StatementBlock){(Statement*[]){statement_continue()}, 1},
+                                    true
+                            }
+                    },
+                    2
+            ),
+            statement_assign(TOKEN_ADD_ASSIGN, expression_name("foo"), expression_int(56))
+    };
+
+    for (Statement **it = stmts; it != stmts + sizeof(stmts)/ sizeof(*stmts); it++) {
+        print_statement(*it);
+        printf("\n");
+    }
+}
+
+void ast_test() {
+    expr_test();
+    statement_test();
+}
+
+void parser_test() {
+    const char *code[] = {
+            "func fib(n:int):int {if (n == 0) { return 0; } else if (n == 1) { return 1; } else { return fib(n - 1) + fib(n - 2); } }",
+            "var i = sizeof(10+20)",
+            "var p :Vec3={1,2,3}",
+            "const foo = sizeof(:float*[50])"
+            "typedef t = func(int):double[1000]",
+            "struct Vec3 {x,y,z:float;}",
+            "union test {one:Vec3; two:Vec2;}",
+            "const pi = 3.14",
+            "enum meme {lol = 1, kek = 2, foo}",
+            "func foo() {while(i == 10) {i++;}}",
+            "func bar() {switch (kind) { case ONE: i++; break; case two: case three: j++; break; default: k++; }}",
+            "var isFoo = i == 0? b+2+3/5:9+63+5-10;"
+    };
+
+    for (const char **it = code; it != code + sizeof(code) / sizeof(*code); it++) {
+        init_stream(*it);
+        Declaration *d = parse_declaration();
+        print_declaration(d);
+        printf("\n");
+    }
+}
+

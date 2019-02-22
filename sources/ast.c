@@ -188,15 +188,13 @@ Expression* expression_compound(Typespec *type, Expression **args, size_t num_ar
 }
 
 Expression* expression_sizeof_type(Typespec *type) {
-    Expression *expr = expression_new(EXPR_SIZEOF);
-    expr->size_of.kind = SIZEOF_TYPE;
-    expr->size_of.type = type;
+    Expression *expr = expression_new(EXPR_SIZEOF_TYPE);
+    expr->size_of_type = type;
     return expr;
 }
 Expression* expression_sizeof_expr(Expression *sizeof_expr) {
-    Expression *expr = expression_new(EXPR_SIZEOF);
-    expr->size_of.kind = SIZEOF_TYPE;
-    expr->size_of.expr = sizeof_expr;
+    Expression *expr = expression_new(EXPR_SIZEOF_EXPR);
+    expr->size_of_expr = sizeof_expr;
     return expr;
 }
 

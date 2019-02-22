@@ -15,10 +15,10 @@
 #include "buf.h"
 #include "alloca.h"
 #include "ast.h"
-#include "fortests.c"
 #include "yap.c"
 #include "lexer.c"
 #include "parser.c"
+#include "fortests.c"
 
 
 int main() {

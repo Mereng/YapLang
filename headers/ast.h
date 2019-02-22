@@ -191,7 +191,8 @@ enum ExpressionKind {
     EXPR_UNARY,
     EXPR_BINARY,
     EXPR_TERNARY,
-    EXPR_SIZEOF
+    EXPR_SIZEOF_TYPE,
+    EXPR_SIZEOF_EXPR
 };
 
 struct CompoundExpression {
@@ -238,19 +239,6 @@ struct FieldExpression {
     const char *name;
 };
 
-enum SizeofKind {
-    SIZEOF_TYPE,
-    SIZEOF_EXPR
-};
-
-struct SizeofExpression {
-    SizeofKind kind;
-    union {
-        Typespec *type;
-        Expression *expr;
-    };
-};
-
 struct Expression {
     ExpressionKind kind;
     union {
@@ -266,7 +254,8 @@ struct Expression {
         CallExpression call;
         IndexExpression index;
         FieldExpression field;
-        SizeofExpression size_of;
+        Typespec *size_of_type;
+        Expression *size_of_expr;
     };
 };
 

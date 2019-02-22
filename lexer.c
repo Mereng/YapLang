@@ -62,6 +62,56 @@ static inline bool is_keyword_str(const char *str) {
 Token token;
 const char *stream;
 
+const char *token_kind_names[] = {
+        [TOKEN_EOF] = "EOF",
+        [TOKEN_INT] = "int",
+        [TOKEN_FLOAT] = "float",
+        [TOKEN_STR] = "string",
+        [TOKEN_NAME] = "name",
+        [TOKEN_MUL] = "*",
+        [TOKEN_DIV] = "/",
+        [TOKEN_MOD] = "%",
+        [TOKEN_BIN_AND] = "&",
+        [TOKEN_LSHIFT] = "<<",
+        [TOKEN_RSHIFT] = ">>",
+        [TOKEN_ADD] = "+",
+        [TOKEN_SUB] = "-",
+        [TOKEN_BIN_OR] = "|",
+        [TOKEN_XOR] = "^",
+        [TOKEN_EQ] = "==",
+        [TOKEN_NOTEQ] = "!=",
+        [TOKEN_LT] = "<",
+        [TOKEN_GT] = ">",
+        [TOKEN_LTEQ] = "<=",
+        [TOKEN_GTEQ] = ">=",
+        [TOKEN_AND] = "&&",
+        [TOKEN_OR] = "||",
+        [TOKEN_INC] = "++",
+        [TOKEN_DEC] = "--",
+        [TOKEN_AUTO_ASSIGN] = ":=",
+        [TOKEN_ADD_ASSIGN] = "+=",
+        [TOKEN_SUB_ASSIGN] = "-=",
+        [TOKEN_OR_ASSIGN] = "|=",
+        [TOKEN_AND_ASSIGN] = "&=",
+        [TOKEN_XOR_ASSIGN] = "^=",
+        [TOKEN_MUL_ASSIGN] = "+=",
+        [TOKEN_DIV_ASSIGN] = "/=",
+        [TOKEN_MOD_ASSIGN] = "%=",
+        [TOKEN_LSHIFT_ASSIGN] = "<<=",
+        [TOKEN_RSHIFT_ASSIGN] = ">>=",
+        [TOKEN_KEYWORD] = "keyword",
+        [TOKEN_COLON] = ":",
+        [TOKEN_LPAREN] = "(",
+        [TOKEN_RPAREN] = ")",
+        [TOKEN_LBRACE] = "{",
+        [TOKEN_RBRACE] = "}",
+        [TOKEN_LBRACKET] = "[",
+        [TOKEN_RBRACKET] = "]",
+        [TOKEN_DOT] = ".",
+        [TOKEN_COMMA] = ",",
+        [TOKEN_SEMICOLON] = ";",
+        [TOKEN_QUESTION_MARK] = "?"
+};
 
 uint8_t char_to_digit[] = {
         ['0'] = 0,
@@ -247,23 +297,31 @@ void parse_str() {
     token.str_val = str_buf;
 }
 
-#define CASE1(c1, c2, k) \
+#define CASE1(c, k) \
+    case c: \
+        token.kind = k; \
+        stream++; \
+        break;
+
+#define CASE2(c1, c2, k1, k2) \
     case c1: \
-        token.kind = *stream++; \
+        token.kind = k1; \
+        *stream++; \
         if (*stream == c2) { \
-            token.kind = k; \
+            token.kind = k2; \
             stream++; \
         } \
         break;
 
-#define CASE2(c1, c2, c3, k1, k2) \
+#define CASE3(c1, c2, c3, k1, k2, k3) \
     case c1: \
-        token.kind = *stream++; \
+        token.kind = k1; \
+        stream++;\
         if (*stream == c2) {\
-            token.kind = k1; \
+            token.kind = k2; \
             stream++; \
         } else if (*stream == c3) {\
-            token.kind = k2;\
+            token.kind = k3;\
             stream++; \
         } \
         break;
@@ -287,7 +345,12 @@ void next_token() {
             parse_str();
             break;
         case '.':
-            parse_float();
+            if (isdigit(stream[1])) {
+                parse_float();
+            } else {
+                token.kind = TOKEN_DOT;
+                stream++;
+            }
             break;
         case '0': case '1': case '2': case '3': case '4': case '5': case '6': case '7': case '8': case '9': {
             while (isdigit(*stream)) {
@@ -317,7 +380,8 @@ void next_token() {
             token.kind = is_keyword_str(token.name) ? TOKEN_KEYWORD : TOKEN_NAME;
             break;
         case '<':
-            token.kind = *stream++;
+            token.kind = TOKEN_LT;
+            stream++;
             if (*stream == '<') {
                 token.kind = TOKEN_LSHIFT;
                 stream++;
@@ -331,7 +395,8 @@ void next_token() {
             }
             break;
         case '>':
-            token.kind = *stream++;
+            token.kind = TOKEN_GT;
+            stream++;
             if (*stream == '>') {
                 token.kind = TOKEN_RSHIFT;
                 stream++;
@@ -344,26 +409,38 @@ void next_token() {
                 stream++;
             }
             break;
-        CASE1('=', '=', TOKEN_EQ)
-        CASE1(':', '=', TOKEN_AUTO_ASSIGN)
-        CASE1('/', '=', TOKEN_DIV_ASSIGN)
-        CASE1('*', '=', TOKEN_MUL_ASSIGN)
-        CASE1('^', '=', TOKEN_XOR_ASSIGN)
-        CASE1('%', '=', TOKEN_MOD_ASSIGN)
-        CASE2('+', '+', '=', TOKEN_INC, TOKEN_ADD_ASSIGN)
-        CASE2('-', '-', '=', TOKEN_DEC, TOKEN_SUB_ASSIGN)
-        CASE2('&', '&', '=', TOKEN_AND, TOKEN_AND_ASSIGN)
-        CASE2('|', '|', '=', TOKEN_OR, TOKEN_OR_ASSIGN)
+        CASE1('\0', TOKEN_EOF)
+        CASE1('(', TOKEN_LPAREN)
+        CASE1(')', TOKEN_RPAREN)
+        CASE1('{', TOKEN_LBRACE)
+        CASE1('}', TOKEN_RBRACE)
+        CASE1('[', TOKEN_LBRACKET)
+        CASE1(']', TOKEN_RBRACKET)
+        CASE1(',', TOKEN_COMMA)
+        CASE1(';', TOKEN_SEMICOLON)
+        CASE1('?', TOKEN_QUESTION_MARK)
+        CASE2('=', '=', TOKEN_ASSIGN, TOKEN_EQ)
+        CASE2(':', '=', TOKEN_COLON, TOKEN_AUTO_ASSIGN)
+        CASE2('/', '=', TOKEN_DIV, TOKEN_DIV_ASSIGN)
+        CASE2('*', '=', TOKEN_MUL, TOKEN_MUL_ASSIGN)
+        CASE2('^', '=', TOKEN_XOR, TOKEN_XOR_ASSIGN)
+        CASE2('%', '=', TOKEN_MOD, TOKEN_MOD_ASSIGN)
+        CASE3('+', '+', '=', TOKEN_ADD, TOKEN_INC, TOKEN_ADD_ASSIGN)
+        CASE3('-', '-', '=', TOKEN_SUB, TOKEN_DEC, TOKEN_SUB_ASSIGN)
+        CASE3('&', '&', '=', TOKEN_BIN_AND, TOKEN_AND, TOKEN_AND_ASSIGN)
+        CASE3('|', '|', '=', TOKEN_BIN_OR, TOKEN_OR, TOKEN_OR_ASSIGN)
 
         default:
-            token.kind = *stream++;
-            break;
+            syntax_error("Invalid %c token", *stream);
+            stream++;
+            goto top;
     }
     token.end = stream;
 }
 
 #undef CASE1
 #undef CASE2
+#undef CASE3
 
 static inline bool is_token(TokenKind kind) {
     return token.kind == kind;
@@ -390,60 +467,31 @@ static inline bool match_keyword(const char *name) {
     }
 }
 
+const char* token_str(Token token) {
+    if (token.kind == TOKEN_NAME || token.kind == TOKEN_KEYWORD) {
+        return token.name;
+    }
+    else if (token.kind < sizeof(token_kind_names) / sizeof(*token_kind_names)) {
+        return token_kind_names[token.kind];
+    } else {
+        return "<Unknown token kind>";
+    }
+}
+
 static inline bool expect_token(TokenKind kind) {
     if (is_token(kind)) {
         next_token();
         return true;
     } else {
-        fatal("expected token %s, got %s", kind, token.kind);
+        fatal("expected token %s, got %s", token_kind_names[kind], token_str(token));
         return false;
     }
 }
 
-int copy_kind_name(char *buf, size_t size,TokenKind kind) {
-    int n;
-    switch (kind) {
-        case TOKEN_INT:
-            n = snprintf(buf, size, "integer");
-            break;
-        case TOKEN_FLOAT:
-            n = snprintf(buf, size, "float");
-            break;
-        case TOKEN_NAME:
-            n = snprintf(buf, size, "name");
-            break;
-        default:
-            if (kind < 128 && isprint(kind)) {
-                n = snprintf(buf, size, "%c", kind);
-            } else {
-                n = snprintf(buf, size, "<ASCII %d>", kind);
-            }
-            break;
-    }
-    return n;
-}
 
 void init_stream(const char* str) {
     stream = str;
     next_token();
-}
-
-
-void print_token(Token token) {
-    switch (token.kind) {
-        case TOKEN_INT:
-            printf("TOKEN INT %" PRIu64 "\n", token.int_val);
-            break;
-        case TOKEN_FLOAT:
-            printf("TOKEN FLOAT %f\n", token.float_val);
-            break;
-        case TOKEN_NAME:
-            printf("TOKEN NAME %.*s\n", (int)(token.end - token.start), token.name);
-            break;
-        default:
-            printf("TOKEN %c\n", token.kind);
-            break;
-    }
 }
 
 void keywords_test() {
@@ -480,16 +528,14 @@ void lex_test() {
     init_stream("\"b\\n\\t\"");
     assert(strcmp(token.str_val, "b\n\t") == 0);
 
-    init_stream("= := + += - -= <= <<= >>= >=");
-    assert(token.kind == '=');
-    next_token();
+    init_stream(":= + += - -= <= <<= >>= >=");
     assert(token.kind == TOKEN_AUTO_ASSIGN);
     next_token();
-    assert(token.kind == '+');
+    assert(token.kind == TOKEN_ADD);
     next_token();
     assert(token.kind == TOKEN_ADD_ASSIGN);
     next_token();
-    assert(token.kind == '-');
+    assert(token.kind == TOKEN_SUB);
     next_token();
     assert(token.kind == TOKEN_SUB_ASSIGN);
     next_token();
