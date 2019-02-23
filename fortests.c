@@ -440,3 +440,10 @@ void parser_test() {
     }
 }
 
+void resolver_test() {
+    assert(symdecl_get("bar") == NULL);
+    const char *foo = str_intern("foo");
+    Declaration* var = declaration_var(foo, typespec_name("int"), expression_name("bar"));
+    symdecl_add(var);
+    assert(symdecl_get(foo) && symdecl_get(foo)->decl == var);
+}

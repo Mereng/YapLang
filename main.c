@@ -18,6 +18,7 @@
 #include "yap.c"
 #include "lexer.c"
 #include "parser.c"
+#include "resolver.c"
 #include "fortests.c"
 
 
@@ -26,7 +27,8 @@ int main() {
     keywords_test();
     lex_test();
     str_intern_test();
-    ast_test();
-    parser_test();
+//    ast_test();
+//    parser_test();
+    resolver_test();
     return 0;
 }
