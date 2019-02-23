@@ -13,14 +13,14 @@ void print_type(Typespec *type) {
             break;
         case TYPESPEC_POINTER:
             printf("(pointer ");
-            print_type(type->ptr.base);
+            print_type(type->pointer.base);
             printf(")");
             break;
         case TYPESPEC_ARRAY:
             printf("(array ");
-            print_type(type->arr.base);
+            print_type(type->array.base);
             printf(" ");
-            print_expression(type->arr.size);
+            print_expression(type->array.size);
             printf(")");
             break;
         case TYPESPEC_FUNC:
@@ -235,9 +235,9 @@ void print_statement(Statement *stmt) {
             break;
         case STMT_RETURN:
             printf("(return");
-            if (stmt->return_stmt.expr) {
+            if (stmt->expr) {
                 printf(" ");
-                print_expression(stmt->return_stmt.expr);
+                print_expression(stmt->expr);
             }
             printf(")");
             break;
@@ -256,7 +256,7 @@ void print_statement(Statement *stmt) {
 }
 
 void print_declaration_agg(Declaration *d) {
-    for (AggregateItem *it = d->agg.items; it != d->agg.items + d->agg.num_items; it++) {
+    for (AggregateItem *it = d->aggregate.items; it != d->aggregate.items + d->aggregate.num_items; it++) {
         printnl();
         printf("(");
         print_type(it->type);

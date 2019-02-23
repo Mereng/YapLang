@@ -35,13 +35,13 @@ Typespec* typespec_name(const char *name) {
 }
 Typespec* typespec_pointer(Typespec *base) {
     Typespec *typespec = typespec_new(TYPESPEC_POINTER);
-    typespec->ptr.base = base;
+    typespec->pointer.base = base;
     return typespec;
 }
 Typespec* typespec_array(Typespec *base, Expression *size) {
     Typespec *typespec = typespec_new(TYPESPEC_ARRAY);
-    typespec->arr.base = base;
-    typespec->arr.size = size;
+    typespec->array.base = base;
+    typespec->array.size = size;
     return typespec;
 }
 Typespec* typespec_func(Typespec **args, size_t num_args, Typespec *ret) {
@@ -66,20 +66,20 @@ Declaration* declaration_enum(const char *name, EnumItem *items, size_t num_item
 }
 Declaration* declaration_struct(const char *name, AggregateItem *items, size_t num_items) {
     Declaration *decl = declaration_new(DECL_STRUCT, name);
-    decl->agg.items = items;
-    decl->agg.num_items = num_items;
+    decl->aggregate.items = items;
+    decl->aggregate.num_items = num_items;
     return decl;
 }
 Declaration* declaration_union(const char *name, AggregateItem *items, size_t num_items) {
     Declaration *decl = declaration_new(DECL_UNION, name);
-    decl->agg.items = items;
-    decl->agg.num_items = num_items;
+    decl->aggregate.items = items;
+    decl->aggregate.num_items = num_items;
     return decl;
 }
 Declaration* declaration_aggregate(DeclarationKind kind, const char *name, AggregateItem *items, size_t num_items) {
     Declaration *decl = declaration_new(kind, name);
-    decl->agg.items = items;
-    decl->agg.num_items = num_items;
+    decl->aggregate.items = items;
+    decl->aggregate.num_items = num_items;
     return decl;
 }
 Declaration* declaration_var(const char *name, Typespec *type, Expression *expr) {
@@ -254,7 +254,7 @@ Statement* statement_auto_assign(const char *name, Expression *init) {
 }
 Statement* statement_return(Expression *expr) {
     Statement *stmt = statement_new(STMT_RETURN);
-    stmt->return_stmt.expr = expr;
+    stmt->expr = expr;
     return stmt;
 }
 Statement* statement_break() {

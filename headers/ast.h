@@ -7,43 +7,17 @@
 #include <stdbool.h>
 
 typedef enum TypespecKind TypespecKind;
-typedef struct FuncTypespec FuncTypespec;
-typedef struct PointerTypespec PointerTypespec;
-typedef struct ArrayTypespec ArrayTypespec;
 typedef struct Typespec Typespec;
 typedef enum DeclarationKind DeclarationKind;
 typedef struct EnumItem EnumItem;
 typedef struct AggregateItem AggregateItem;
 typedef struct FuncParam FuncParam;
-typedef struct EnumDeclaration EnumDeclaration;
-typedef struct AggregateDeclaration AggregateDeclaration;
-typedef struct VarDeclaration VarDeclaration;
-typedef struct ConstDeclaration ConstDeclaration;
-typedef struct FuncDeclaration FuncDeclaration;
-typedef struct TypedefDeclaration TypedefDeclaration;
 typedef struct Declaration Declaration;
 typedef enum ExpressionKind ExpressionKind;
-typedef struct CompoundExpression CompundExpression;
-typedef struct UnaryExpression UnaryExpression;
-typedef struct BinaryExpression BinaryExpression;
-typedef struct TernaryExpression TernaryExpression;
-typedef struct CastExpression CastExpression;
-typedef struct CallExpression CallExpression;
-typedef struct IndexExpression IndexExpression;
-typedef struct FieldExpression FieldExpression;
-typedef enum SizeofKind SizeofKind;
-typedef struct SizeofExpression SizeofExpression;
 typedef struct Expression Expression;
 typedef enum StatementKind StatementKind;
 typedef struct ElseIf ElseIf;
-typedef struct IfStatement IfStatement;
-typedef struct ForStatement ForStatement;
-typedef struct WhileStatement WhileStatement;
 typedef struct SwitchCase SwitchCase;
-typedef struct SwitchStatement SwitchStatement;
-typedef struct AssignStatement AssignStatement;
-typedef struct AutoAssignStatement AutoAssignStatement;
-typedef struct ReturnStatement ReturnStatement;
 typedef struct Statement Statement;
 typedef struct StatementBlock StatementBlock;
 
@@ -59,28 +33,22 @@ enum TypespecKind {
     TYPESPEC_FUNC
 };
 
-struct FuncTypespec {
-    Typespec **args_types;
-    size_t num_args_types;
-    Typespec *return_type;
-};
-
-struct PointerTypespec {
-    Typespec *base;
-};
-
-struct ArrayTypespec {
-    Typespec *base;
-    Expression *size;
-};
-
 struct Typespec {
     TypespecKind kind;
     union {
         const char *name;
-        FuncTypespec func;
-        ArrayTypespec arr;
-        PointerTypespec ptr;
+        struct {
+            Typespec **args_types;
+            size_t num_args_types;
+            Typespec *return_type;
+        } func;
+        struct {
+            Typespec *base;
+            Expression *size;
+        } array;
+        struct {
+            Typespec *base;
+        } pointer;
     };
 };
 
@@ -123,47 +91,35 @@ struct FuncParam {
     Typespec *type;
 };
 
-struct EnumDeclaration {
-    EnumItem *items;
-    size_t num_items;
-};
-
-struct AggregateDeclaration {
-    AggregateItem *items;
-    size_t num_items;
-};
-
-struct VarDeclaration {
-    Typespec *type;;
-    Expression *expr;
-};
-
-struct ConstDeclaration {
-    Expression *expr;
-};
-
-struct FuncDeclaration {
-    FuncParam *params;
-    size_t num_params;
-    Typespec *return_type;
-    StatementBlock body;
-};
-
-struct TypedefDeclaration {
-    Typespec *type;
-};
-
 
 struct Declaration {
     DeclarationKind kind;
     const char *name;
     union {
-        EnumDeclaration enum_delc;
-        AggregateDeclaration agg;
-        VarDeclaration var;
-        ConstDeclaration const_decl;
-        FuncDeclaration func;
-        TypedefDeclaration typedef_decl;
+        struct {
+            EnumItem *items;
+            size_t num_items;
+        } enum_delc;
+        struct {
+            AggregateItem *items;
+            size_t num_items;
+        } aggregate;
+        struct {
+            Typespec *type;;
+            Expression *expr;
+        } var;
+        struct {
+            Expression *expr;
+        } const_decl;
+        struct {
+            FuncParam *params;
+            size_t num_params;
+            Typespec *return_type;
+            StatementBlock body;
+        } func;
+        struct {
+            Typespec *type;
+        } typedef_decl;
     };
 };
 
@@ -195,50 +151,6 @@ enum ExpressionKind {
     EXPR_SIZEOF_EXPR
 };
 
-struct CompoundExpression {
-    Typespec *type;
-    Expression **args;
-    size_t num_args;
-};
-
-struct CastExpression {
-    Typespec *type;
-    Expression *expr;
-};
-
-struct UnaryExpression {
-    TokenKind op;
-    Expression *operand;
-};
-
-struct BinaryExpression {
-    TokenKind op;
-    Expression *left;
-    Expression *right;
-};
-
-struct TernaryExpression {
-    Expression *cond;
-    Expression *then_ex;
-    Expression *else_ex;
-};
-
-struct CallExpression {
-    Expression *operand;
-    Expression **args;
-    size_t num_args;
-};
-
-struct IndexExpression {
-    Expression *operand;
-    Expression *index;
-};
-
-struct FieldExpression {
-    Expression *operand;
-    const char *name;
-};
-
 struct Expression {
     ExpressionKind kind;
     union {
@@ -246,14 +158,42 @@ struct Expression {
         double float_val;
         const char *str_val;
         const char *name;
-        CompundExpression compound;
-        CastExpression cast;
-        UnaryExpression unary;
-        BinaryExpression binary;
-        TernaryExpression ternary;
-        CallExpression call;
-        IndexExpression index;
-        FieldExpression field;
+        struct {
+            Typespec *type;
+            Expression **args;
+            size_t num_args;
+        } compound;
+        struct {
+            Typespec *type;
+            Expression *expr;
+        } cast;
+        struct {
+            TokenKind op;
+            Expression *operand;
+        } unary;
+        struct {
+            TokenKind op;
+            Expression *left;
+            Expression *right;
+        } binary;
+        struct {
+            Expression *cond;
+            Expression *then_ex;
+            Expression *else_ex;
+        } ternary;
+        struct {
+            Expression *operand;
+            Expression **args;
+            size_t num_args;
+        } call;
+        struct {
+            Expression *operand;
+            Expression *index;
+        } index;
+        struct {
+            Expression *operand;
+            const char *name;
+        } field;
         Typespec *size_of_type;
         Expression *size_of_expr;
     };
@@ -297,26 +237,6 @@ struct ElseIf {
     StatementBlock body;
 };
 
-struct IfStatement {
-    Expression *cond;
-    StatementBlock then;
-    ElseIf *else_ifs;
-    size_t num_else_ifs;
-    StatementBlock else_body;
-};
-
-struct ForStatement {
-    Statement *init;
-    Expression *cond;
-    Statement *next;
-    StatementBlock body;
-};
-
-struct WhileStatement {
-    Expression *cond;
-    StatementBlock body;
-};
-
 struct SwitchCase {
     Expression **expressions;
     size_t num_expressions;
@@ -324,37 +244,40 @@ struct SwitchCase {
     bool is_default;
 };
 
-struct SwitchStatement {
-    Expression *expr;
-    SwitchCase *cases;
-    size_t num_cases;
-};
-
-struct AssignStatement {
-    TokenKind op;
-    Expression *left;
-    Expression *right;
-};
-
-struct AutoAssignStatement {
-    const char *name;
-    Expression *init;
-};
-
-struct ReturnStatement {
-    Expression *expr;
-};
-
 struct Statement {
     StatementKind kind;
     union {
-        IfStatement if_stmt;
-        ForStatement for_stmt;
-        WhileStatement while_stmt;
-        SwitchStatement switch_stmt;
-        AssignStatement assign;
-        AutoAssignStatement auto_assign;
-        ReturnStatement return_stmt;
+        struct {
+            Expression *cond;
+            StatementBlock then;
+            ElseIf *else_ifs;
+            size_t num_else_ifs;
+            StatementBlock else_body;
+        } if_stmt;
+        struct {
+            Statement *init;
+            Expression *cond;
+            Statement *next;
+            StatementBlock body;
+        } for_stmt;
+        struct {
+            Expression *cond;
+            StatementBlock body;
+        } while_stmt;
+        struct {
+            Expression *expr;
+            SwitchCase *cases;
+            size_t num_cases;
+        } switch_stmt;
+        struct {
+            TokenKind op;
+            Expression *left;
+            Expression *right;
+        } assign;
+        struct {
+            const char *name;
+            Expression *init;
+        } auto_assign;
         StatementBlock block;
         Expression *expr;
         Declaration *decl;

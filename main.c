@@ -27,8 +27,8 @@ int main() {
     keywords_test();
     lex_test();
     str_intern_test();
-//    ast_test();
-//    parser_test();
+    ast_test();
+    parser_test();
     resolver_test();
     return 0;
 }
