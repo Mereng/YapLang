@@ -1,6 +1,7 @@
 Expression* parse_expression();
 Typespec *parse_type();
 Statement* parse_statement();
+Declaration* try_parse_declaration();
 
 const char *parse_name() {
     const char *name = token.name;
@@ -367,7 +368,12 @@ Statement* parse_statement() {
     } else if (match_keyword(keywords.switch_keyword)) {
         return parse_statement_switch();
     } else if (match_keyword(keywords.return_keyword)) {
-        Statement *stmt = statement_return(parse_expression());
+        Statement *stmt = NULL;
+        if (!is_token(TOKEN_SEMICOLON)) {
+           stmt = statement_return(parse_expression());
+        } else {
+            stmt = statement_return(NULL);
+        }
         expect_token(TOKEN_SEMICOLON);
         return stmt;
     } else if (match_keyword(keywords.break_keyword)) {
@@ -379,6 +385,10 @@ Statement* parse_statement() {
     } else if (is_token(TOKEN_LBRACE)) {
         return statement_block(parse_statement_block());
     } else {
+        Declaration *d = try_parse_declaration();
+        if (d) {
+            return statement_decl(d);
+        }
         Statement *stmt = parse_statement_simple();
         expect_token(TOKEN_SEMICOLON);
         return stmt;
@@ -441,6 +451,7 @@ Declaration* parse_declaration_var() {
         if (match_token(TOKEN_ASSIGN)) {
             expr = parse_expression();
         }
+        expect_token(TOKEN_SEMICOLON);
         return declaration_var(name, type, expr);
     } else {
         fatal("Expected : or = after var, got %s", token_str(token));
@@ -486,7 +497,7 @@ Declaration* parse_declaration_func() {
     return declaration_func(name, ast_dup(params, buf_sizeof(params)), buf_len(params), ret, block);
 }
 
-Declaration* parse_declaration() {
+Declaration* try_parse_declaration() {
     if (match_keyword(keywords.enum_keyword)) {
         return parse_declaration_enum();
     } else if (match_keyword(keywords.struct_keyword)) {
@@ -502,7 +513,16 @@ Declaration* parse_declaration() {
     } else if (match_keyword(keywords.func_keyword)) {
         return parse_declaration_func();
     } else {
+        return NULL;
+    }
+}
+
+Declaration* parse_declaration() {
+    Declaration *decl = try_parse_declaration();
+    if (!decl) {
         fatal("Expected declaration keyword, got %s ", token_str(token));
     }
+
+    return decl;
 }
 

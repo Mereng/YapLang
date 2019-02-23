@@ -289,6 +289,7 @@ enum StatementKind {
     STMT_ASSIGN,
     STMT_AUTO_ASSIGN,
     STMT_EXPR,
+    STMT_DECL
 };
 
 struct ElseIf {
@@ -356,6 +357,7 @@ struct Statement {
         ReturnStatement return_stmt;
         StatementBlock block;
         Expression *expr;
+        Declaration *decl;
     };
 };
 
@@ -373,4 +375,5 @@ Statement* statement_break();
 Statement* statement_continue();
 Statement* statement_block(StatementBlock block);
 Statement* statement_expr(Expression *expr);
+Statement* statement_decl(Declaration *decl);
 #endif

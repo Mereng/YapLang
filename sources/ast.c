@@ -274,3 +274,8 @@ Statement* statement_expr(Expression *expr) {
     stmt->expr = expr;
     return stmt;
 }
+Statement* statement_decl(Declaration *decl) {
+    Statement *stmt = statement_new(STMT_DECL);
+    stmt->decl = decl;
+    return stmt;
+}

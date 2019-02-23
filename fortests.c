@@ -1,3 +1,4 @@
+void print_declaration(Declaration *d);
 int indent = 0;
 
 void printnl() {
@@ -233,8 +234,11 @@ void print_statement(Statement *stmt) {
             print_expression(stmt->expr);
             break;
         case STMT_RETURN:
-            printf("(return ");
-            print_expression(stmt->return_stmt.expr);
+            printf("(return");
+            if (stmt->return_stmt.expr) {
+                printf(" ");
+                print_expression(stmt->return_stmt.expr);
+            }
             printf(")");
             break;
         case STMT_BREAK:
@@ -242,6 +246,9 @@ void print_statement(Statement *stmt) {
             break;
         case STMT_CONTINUE:
             printf("(continue)");
+            break;
+        case STMT_DECL:
+            print_declaration(stmt->decl);
             break;
         default:
             break;
@@ -410,8 +417,8 @@ void ast_test() {
 void parser_test() {
     const char *code[] = {
             "func fib(n:int):int {if (n == 0) { return 0; } else if (n == 1) { return 1; } else { return fib(n - 1) + fib(n - 2); } }",
-            "var i = sizeof(10+20)",
-            "var p :Vec3={1,2,3}",
+            "var i = sizeof(10+20);",
+            "var p :Vec3={1,2,3};",
             "const foo = sizeof(:float*[50])"
             "typedef t = func(int):double[1000]",
             "struct Vec3 {x,y,z:float;}",
@@ -420,7 +427,9 @@ void parser_test() {
             "enum meme {lol = 1, kek = 2, foo}",
             "func foo() {while(i == 10) {i++;}}",
             "func bar() {switch (kind) { case ONE: i++; break; case two: case three: j++; break; default: k++; }}",
-            "var isFoo = i == 0? b+2+3/5:9+63+5-10;"
+            "var isFoo = i == 0? b+2+3/5:9+63+5-10;",
+            "func foo() {var i : int = 10; i++; return i;}",
+            "func bar() {if (n == 5) {return;}}"
     };
 
     for (const char **it = code; it != code + sizeof(code) / sizeof(*code); it++) {
