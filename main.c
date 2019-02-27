@@ -13,7 +13,7 @@
 
 #include "tools.h"
 #include "buf.h"
-#include "alloca.h"
+#include "aalloc.h"
 #include "ast.h"
 #include "yap.c"
 #include "lexer.c"
