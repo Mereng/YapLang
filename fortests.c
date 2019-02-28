@@ -441,9 +441,29 @@ void parser_test() {
 }
 
 void resolver_test() {
-    assert(entity_get("bar") == NULL);
-    const char *foo = str_intern("foo");
-    Declaration* var = declaration_var(foo, typespec_name("int"), expression_name("bar"));
-    entity_append_declaration(var);
-    assert(entity_get(foo) && entity_get(foo)->decl == var);
+    const char *integer = str_intern("int");
+    entity_append_type(integer, type_int_link);
+
+    const char *code[] = {
+            "const foo = sizeof(*pointer) + 1",
+            "var pointer: BarType*;",
+            "struct BarType {i : int[sizeof(pointer)];}"
+    };
+
+    for (size_t i = 0; i < sizeof(code) / sizeof(*code); i++) {
+        init_stream(code[i]);
+        entity_append_declaration(parse_declaration());
+    }
+
+    for (Entity **it = entities; it != buf_end(entities); it++) {
+        Entity *entity = *it;
+        resolve_entity(entity);
+        if ((*it)->kind == ENTITY_TYPE) {
+            complete_type(entity->type);
+        }
+    }
+
+    for (Entity **it = entities_ordered; it != buf_end(entities_ordered); it++) {
+        printf("%s\n", (*it)->name);
+    }
 }

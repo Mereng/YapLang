@@ -171,37 +171,67 @@ Type* type_func(Type **params, size_t num_params, Type *ret) {
     return type;
 }
 
-Type* type_struct(TypeField *fields, size_t num_fields) {
-    Type *type = type_new(TYPE_STRUCT);
-    type->size = 0;
-    for (TypeField *it = fields; it != fields + num_fields; it++) {
-        type->size += it->type->size;
-    }
-    type->aggregate.fields = calloc(num_fields, sizeof(TypeField));
-    memcpy(type->aggregate.fields, fields, num_fields * sizeof(TypeField));
-    type->aggregate.num_fields = num_fields;
-    return type;
-}
-Type* type_union(TypeField *fields, size_t num_fields) {
-    Type *type = type_new(TYPE_UNION);
-    type->size = 0;
-    for (TypeField *it = fields; it != fields + num_fields; it++) {
-        type->size += it->type->size;
-    }
-    type->aggregate.fields = calloc(num_fields, sizeof(TypeField));
-    memcpy(type->aggregate.fields, fields, num_fields * sizeof(TypeField));
-    type->aggregate.num_fields = num_fields;
-    return type;
-}
-
 Type* type_incomplete(Entity *entity) {
     Type *type = type_new(TYPE_INCOPLETE);
     type->entity = entity;
     return type;
 }
-
-
 Entity **entities;
+Entity **entities_ordered;
+
+Type* resolve_typespec(Typespec *typespec);
+
+void type_complete_struct(Type* type, TypeField *fields, size_t num_fields) {
+    type->kind = TYPE_STRUCT;
+    type->size = 0;
+    for (TypeField *it = fields; it != fields + num_fields; it++) {
+        type->size += it->type->size;
+    }
+    type->aggregate.fields = calloc(num_fields, sizeof(TypeField));
+    memcpy(type->aggregate.fields, fields, num_fields * sizeof(TypeField));
+    type->aggregate.num_fields = num_fields;
+}
+
+void type_complete_union(Type* type, TypeField *fields, size_t num_fields) {
+    type->kind = TYPE_UNION;
+    type->size = 0;
+    for (TypeField *it = fields; it != fields + num_fields; it++) {
+        type->size += it->type->size;
+    }
+    type->aggregate.fields = calloc(num_fields, sizeof(TypeField));
+    memcpy(type->aggregate.fields, fields, num_fields * sizeof(TypeField));
+    type->aggregate.num_fields = num_fields;
+}
+
+void complete_type(Type *type) {
+    if (type->kind == TYPE_COMPLETING) {
+        fatal("Type dependence cycle");
+    }
+
+    if (type->kind != TYPE_INCOPLETE) {
+        return;
+    }
+
+    type->kind = TYPE_COMPLETING;
+    Declaration *decl = type->entity->decl;
+    TypeField *fields = NULL;
+
+    for (AggregateItem *it = decl->aggregate.items; it != decl->aggregate.items + decl->aggregate.num_items; it++) {
+        Type *item_type = resolve_typespec(it->type);
+        complete_type(item_type);
+        for (const char **name = it->names; name != it->names + it->num_names; name++) {
+            buf_push(fields, ((TypeField){*name, item_type}));
+        }
+    }
+
+    if (decl->kind == DECL_STRUCT) {
+        type_complete_struct(type, fields, buf_len(fields));
+    } else {
+        type_complete_union(type, fields, buf_len(fields));
+    }
+
+    buf_push(entities_ordered, type->entity);
+}
 
 Entity* entity_new(EntityKind kind, const char *name, Declaration *declaration) {
     Entity *entity = calloc(1, sizeof(Declaration));
@@ -273,43 +303,132 @@ Entity* entity_append_type(const char *name, Type *type) {
     return entity;
 }
 
-Entity **entities_ordered;
+
+Entity* resolve_entity_name(const char *name);
+ResolvedExpression resolve_expression(Expression *expr);
+
+ResolvedExpression resolve_expression_name(Expression *expr) {
+    Entity *entity = resolve_entity_name(expr->name);
+    if (entity->kind == ENTITY_VAR) {
+        return (ResolvedExpression){entity->type};
+    } else if (entity->kind == ENTITY_CONST) {
+        return (ResolvedExpression) {entity->type, true, entity->val};
+    } else {
+        fatal("%s must be var or const");
+    }
+}
+
+ResolvedExpression resolve_expression_dereference(Expression *expr) {
+    assert(expr->unary.op == TOKEN_MUL);
+    ResolvedExpression operand = resolve_expression(expr->unary.operand);
+    if (operand.type->kind != TYPE_POINTER) {
+        fatal("Can't dereference non pointer type");
+    }
+
+    return (ResolvedExpression){operand.type->pointer.base};
+}
+
+ResolvedExpression resolve_expression_binary(Expression *expr) {
+    assert(expr->binary.op == TOKEN_ADD);
+    ResolvedExpression left = resolve_expression(expr->binary.left);
+    ResolvedExpression right = resolve_expression(expr->binary.right);
+    ResolvedExpression result = {left.type};
+    if (left.is_const && right.is_const) {
+        result.is_const = true;
+        result.val = left.val + right.val;
+    }
+
+    return result;
+}
 
 ResolvedExpression resolve_expression(Expression *expr) {
     switch (expr->kind) {
         case EXPR_INT:
-            //..
+            return (ResolvedExpression){type_int_link, true, expr->int_val};
         case EXPR_NAME:
-            //..
+            return resolve_expression_name(expr);
         case EXPR_UNARY:
-            //..
+            return resolve_expression_dereference(expr);
         case EXPR_BINARY:
-            //..
-    }
-}
-
-Entity* resolve_entity_name(const char *name);
-
-Type* resolve_typespec(Typespec *typespec) {
-    switch (typespec->kind) {
-        case TYPESPEC_NAME: {
-            Entity *entity = resolve_entity_name(typespec->name);
-            return entity->type;
+            return resolve_expression_binary(expr);
+        case EXPR_SIZEOF_EXPR: {
+            ResolvedExpression result = resolve_expression(expr->size_of_expr);
+            Type *type = result.type;
+            complete_type(type);
+            return (ResolvedExpression){type_int_link, true, type->size};
         }
-        case TYPESPEC_ARRAY:
-            //...
-            return type_array(resolve_typespec(typespec->array.base));
-        case TYPESPEC_POINTER:
-            return type_ponter(resolve_typespec(typespec->pointer.base));
-        case TYPESPEC_FUNC:
-            break;
+        case EXPR_SIZEOF_TYPE: {
+            Type *type = resolve_typespec(expr->size_of_type);
+            complete_type(type);
+            return (ResolvedExpression){type_int_link, true, type->size};
+        }
         default:
             break;
     }
 }
 
-Type* resolve_declaration_type(Declaration *declaration) {
+ResolvedExpression resolve_const_expression(Expression *expr) {
+    ResolvedExpression result = resolve_expression(expr);
+    if (!result.is_const) {
+        fatal("Expected constant expression");
+    }
+    return result;
+}
 
+
+Type* resolve_typespec(Typespec *typespec) {
+    switch (typespec->kind) {
+        case TYPESPEC_NAME: {
+            Entity *entity = resolve_entity_name(typespec->name);
+            if (entity->kind != ENTITY_TYPE) {
+                fatal("%s must be type", typespec->name);
+            }
+            return entity->type;
+        }
+        case TYPESPEC_ARRAY:
+            return type_array(resolve_typespec(typespec->array.base), (size_t)resolve_const_expression(typespec->array.size).val);
+        case TYPESPEC_POINTER:
+            return type_ponter(resolve_typespec(typespec->pointer.base));
+        case TYPESPEC_FUNC: {
+            Type **args = NULL;
+            for (Typespec **it = typespec->func.args_types; it != typespec->func.args_types + typespec->func.num_args_types; it++) {
+                buf_push(args, resolve_typespec(*it));
+            }
+            return type_func(args, buf_len(args), resolve_typespec(typespec->func.return_type));
+        }
+        default:
+            break;
+    }
+}
+
+Type* resolve_declaration_type(Declaration *decl) {
+    return resolve_typespec(decl->typedef_decl.type);
+}
+
+Type* resolve_declaration_var(Declaration *decl) {
+    Type *type = NULL;
+
+    if (decl->var.type) {
+        type = resolve_typespec(decl->var.type);
+    }
+
+    if (decl->var.expr) {
+        ResolvedExpression result = resolve_expression(decl->var.expr);
+        if (type && result.type != type) {
+            fatal("Declared var types doesn't not match inferred type");
+        }
+
+        type = result.type;
+    }
+
+    complete_type(type);
+    return type;
+}
+
+Type* resolve_declaration_const(Declaration *decl, int64_t *val) {
+    ResolvedExpression result = resolve_expression(decl->const_decl.expr);
+    *val = result.val;
+    return result.type;
 }
 
 void resolve_entity(Entity *entity) {
@@ -324,10 +443,13 @@ void resolve_entity(Entity *entity) {
 
     switch (entity->kind) {
         case ENTITY_TYPE:
+            entity->type = resolve_declaration_type(entity->decl);
             break;
         case ENTITY_VAR:
+            entity->type = resolve_declaration_var(entity->decl);
             break;
         case ENTITY_CONST:
+            entity->type = resolve_declaration_const(entity->decl, &entity->val);
             break;
         default:
             break;
@@ -346,10 +468,4 @@ Entity* resolve_entity_name(const char *name) {
 
     resolve_entity(entity);
     return entity;
-}
-
-void resolve_entities() {
-    for (Entity **it = entities; it != buf_end(entities); it++) {
-        resolve_entity(*it);
-    }
 }
