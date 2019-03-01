@@ -429,7 +429,7 @@ void parser_test() {
             "func bar() {switch (kind) { case ONE: i++; break; case two: case three: j++; break; default: k++; }}",
             "var isFoo = i == 0? b+2+3/5:9+63+5-10;",
             "func foo() {var i : int = 10; i++; return i;}",
-            "func bar() {if (n == 5) {return;}}"
+            "func bar() {if (n == 5) {return;}}",
     };
 
     for (const char **it = code; it != code + sizeof(code) / sizeof(*code); it++) {
@@ -445,9 +445,13 @@ void resolver_test() {
     entity_append_type(integer, type_int_link);
 
     const char *code[] = {
-            "const foo = sizeof(*pointer) + 1",
+            "const foo = sizeof(pointer) + 1",
             "var pointer: BarType*;",
-            "struct BarType {i : int[sizeof(pointer)];}"
+            "struct BarType {i : int[sizeof(&pointer)];}",
+            "var bar: BarType;",
+            "typedef S = int[m + foo]",
+            "const m = sizeof(bar.i);",
+            "var foobar = &bar"
     };
 
     for (size_t i = 0; i < sizeof(code) / sizeof(*code); i++) {

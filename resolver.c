@@ -9,7 +9,7 @@ typedef enum TypeKind {
     TYPE_ARRAY,
     TYPE_POINTER,
     TYPE_FUNC,
-    TYPE_INCOPLETE,
+    TYPE_INCOMPLETE,
     TYPE_COMPLETING
 } TypeKind;
 
@@ -70,11 +70,40 @@ struct Type {
     };
 };
 
+Type type_int_val = {TYPE_INT, 4};
+Type type_float_val = {TYPE_FLOAT, 4};
+
+Type *type_int_link = &type_int_val;
+Type *type_float_link = &type_float_val;
+
 typedef struct ResolvedExpression {
     Type *type;
+    bool is_lvalue;
     bool is_const;
     int64_t val;
 } ResolvedExpression;
+
+ResolvedExpression resolved_rvalue(Type *type) {
+    return (ResolvedExpression) {
+        .type = type,
+    };
+}
+
+ResolvedExpression resolved_lvalue(Type *type) {
+    return (ResolvedExpression) {
+        .type = type,
+        .is_lvalue = true
+    };
+}
+
+ResolvedExpression resolved_const(int64_t val) {
+    return (ResolvedExpression) {
+        .type = type_int_link,
+        .is_const = true,
+        .val = val
+    };
+}
+
 
 Type *type_new(TypeKind kind) {
     Type *type = calloc(1, sizeof(Type));
@@ -82,11 +111,6 @@ Type *type_new(TypeKind kind) {
     return type;
 }
 
-Type type_int_val = {TYPE_INT, 4};
-Type type_float_val = {TYPE_FLOAT, 4};
-
-Type *type_int_link = &type_int_val;
-Type *type_float_link = &type_float_val;
 
 typedef struct PointerTypeCached {
     Type *base;
@@ -172,7 +196,7 @@ Type* type_func(Type **params, size_t num_params, Type *ret) {
 }
 
 Type* type_incomplete(Entity *entity) {
-    Type *type = type_new(TYPE_INCOPLETE);
+    Type *type = type_new(TYPE_INCOMPLETE);
     type->entity = entity;
     return type;
 }
@@ -196,7 +220,7 @@ void type_complete_union(Type* type, TypeField *fields, size_t num_fields) {
     type->kind = TYPE_UNION;
     type->size = 0;
     for (TypeField *it = fields; it != fields + num_fields; it++) {
-        type->size += it->type->size;
+        type->size = MAX(it->type->size, type->size);
     }
     type->aggregate.fields = calloc(num_fields, sizeof(TypeField));
     memcpy(type->aggregate.fields, fields, num_fields * sizeof(TypeField));
@@ -208,7 +232,7 @@ void complete_type(Type *type) {
         fatal("Type dependence cycle");
     }
 
-    if (type->kind != TYPE_INCOPLETE) {
+    if (type->kind != TYPE_INCOMPLETE) {
         return;
     }
 
@@ -310,19 +334,30 @@ ResolvedExpression resolve_expression(Expression *expr);
 ResolvedExpression resolve_expression_name(Expression *expr) {
     Entity *entity = resolve_entity_name(expr->name);
     if (entity->kind == ENTITY_VAR) {
-        return (ResolvedExpression){entity->type};
+        return resolved_lvalue(entity->type);
     } else if (entity->kind == ENTITY_CONST) {
-        return (ResolvedExpression) {entity->type, true, entity->val};
+        return resolved_const(entity->val);
     } else {
         fatal("%s must be var or const");
     }
 }
 
-ResolvedExpression resolve_expression_dereference(Expression *expr) {
-    assert(expr->unary.op == TOKEN_MUL);
+ResolvedExpression resolve_expression_unary(Expression *expr) {
     ResolvedExpression operand = resolve_expression(expr->unary.operand);
-    if (operand.type->kind != TYPE_POINTER) {
-        fatal("Can't dereference non pointer type");
+    switch (expr->unary.op) {
+        case TOKEN_MUL:
+            if (operand.type->kind != TYPE_POINTER) {
+                fatal("Can't dereference non pointer type");
+            }
+            return resolved_lvalue(operand.type->pointer.base);
+        case TOKEN_BIN_AND:
+            if (!operand.is_lvalue) {
+                fatal("Can't take address of non-lvalue");
+            }
+            return (ResolvedExpression){type_ponter(type_ponter(operand.type))};
+        default:
+            assert(0);
+            break;
     }
 
     return (ResolvedExpression){operand.type->pointer.base};
@@ -332,37 +367,54 @@ ResolvedExpression resolve_expression_binary(Expression *expr) {
     assert(expr->binary.op == TOKEN_ADD);
     ResolvedExpression left = resolve_expression(expr->binary.left);
     ResolvedExpression right = resolve_expression(expr->binary.right);
-    ResolvedExpression result = {left.type};
     if (left.is_const && right.is_const) {
-        result.is_const = true;
-        result.val = left.val + right.val;
+        return resolved_const(left.val + right.val);
+    } else {
+        return resolved_rvalue(left.type);
+    }
+}
+
+ResolvedExpression resolve_expression_field(Expression *expr) {
+    ResolvedExpression operand = resolve_expression(expr->field.operand);
+    complete_type(operand.type);
+    if (operand.type->kind != TYPE_STRUCT && operand.type->kind != TYPE_UNION) {
+        fatal("Can only access fields on aggregate types");
     }
 
-    return result;
+    for (TypeField *it = operand.type->aggregate.fields; it != operand.type->aggregate.fields + operand.type->aggregate.num_fields; it++) {
+        if (it->name == expr->field.name) {
+            return operand.is_lvalue ? resolved_lvalue(it->type) : resolved_rvalue(it->type);
+        }
+    }
+
+    fatal("No field named %s on type", expr->field.name);
 }
 
 ResolvedExpression resolve_expression(Expression *expr) {
     switch (expr->kind) {
         case EXPR_INT:
-            return (ResolvedExpression){type_int_link, true, expr->int_val};
+            return resolved_const(expr->int_val);
         case EXPR_NAME:
             return resolve_expression_name(expr);
         case EXPR_UNARY:
-            return resolve_expression_dereference(expr);
+            return resolve_expression_unary(expr);
         case EXPR_BINARY:
             return resolve_expression_binary(expr);
         case EXPR_SIZEOF_EXPR: {
             ResolvedExpression result = resolve_expression(expr->size_of_expr);
             Type *type = result.type;
             complete_type(type);
-            return (ResolvedExpression){type_int_link, true, type->size};
+            return resolved_const(type->size);
         }
         case EXPR_SIZEOF_TYPE: {
             Type *type = resolve_typespec(expr->size_of_type);
             complete_type(type);
-            return (ResolvedExpression){type_int_link, true, type->size};
+            return resolved_const(type->size);
         }
+        case EXPR_FIELD:
+            return resolve_expression_field(expr);
         default:
+            assert(0);
             break;
     }
 }
