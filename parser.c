@@ -24,7 +24,7 @@ Expression* parse_expression_compound(Typespec *type) {
 
 Expression* parse_expression_operand() {
     if (is_token(TOKEN_INT)) {
-        uint64_t val = token.int_val;
+        int64_t val = token.int_val;
         next_token();
         return expression_int(val);
     } else if (is_token(TOKEN_FLOAT)) {
@@ -55,7 +55,7 @@ Expression* parse_expression_operand() {
             expect_token(TOKEN_RPAREN);
             return expr;
         }
-    } else if(match_keyword(keywords.sizeof_keyword)) {
+    } else if (match_keyword(keywords.sizeof_keyword)) {
         expect_token(TOKEN_LPAREN);
         if (match_token(TOKEN_COLON)) {
             Typespec *type = parse_type();
@@ -66,6 +66,13 @@ Expression* parse_expression_operand() {
             expect_token(TOKEN_RPAREN);
             return expression_sizeof_expr(expr);
         }
+    } else if (match_keyword(keywords.cast_keyword)) {
+        expect_token(TOKEN_LPAREN);
+        Typespec *type = parse_type();
+        expect_token(TOKEN_COMMA);
+        Expression *cast_expr = parse_expression();
+        expect_token(TOKEN_RPAREN);
+        return expression_cast(type, cast_expr);
     } else {
         fatal("Unexpected token %s in expression", token_str(token));
         return NULL;
@@ -100,7 +107,7 @@ Expression* parse_expression_base() {
 }
 
 Expression* parse_expression_unary() {
-    if (is_token(TOKEN_ADD) || is_token(TOKEN_SUB) || is_token(TOKEN_MUL) || is_token(TOKEN_BIN_AND)) {
+    if (is_token(TOKEN_ADD) || is_token(TOKEN_SUB) || is_token(TOKEN_MUL) || is_token(TOKEN_BIN_AND) || is_token(TOKEN_BIN_NOT)) {
         TokenKind op = token.kind;
         next_token();
         return expression_unary(op, parse_expression_unary());

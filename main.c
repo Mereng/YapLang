@@ -23,12 +23,13 @@
 
 
 int main() {
-    buf_test();
-    keywords_test();
-    lex_test();
-    str_intern_test();
-    ast_test();
-    parser_test();
+    keywords_init();
+//    buf_test();
+//    keywords_test();
+//    lex_test();
+//    str_intern_test();
+//    ast_test();
+//    parser_test();
     resolver_test();
     return 0;
 }

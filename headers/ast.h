@@ -154,7 +154,7 @@ enum ExpressionKind {
 struct Expression {
     ExpressionKind kind;
     union {
-        uint64_t int_val;
+        int64_t int_val;
         double float_val;
         const char *str_val;
         const char *name;
@@ -200,7 +200,7 @@ struct Expression {
 };
 
 Expression* expression_new(ExpressionKind kind);
-Expression* expression_int(uint64_t int_val);
+Expression* expression_int(int64_t int_val);
 Expression* expression_float(double float_val);
 Expression* expression_str(const char *str_val);
 Expression* expression_name(const char *name);

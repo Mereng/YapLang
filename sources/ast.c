@@ -113,7 +113,7 @@ Expression* expression_new(ExpressionKind kind) {
     expr->kind = kind;
     return expr;
 }
-Expression* expression_int(uint64_t int_val) {
+Expression* expression_int(int64_t int_val) {
     Expression *expr = expression_new(EXPR_INT);
     expr->int_val = int_val;
     return expr;

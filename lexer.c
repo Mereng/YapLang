@@ -19,6 +19,7 @@ struct {
     const char *break_keyword;
     const char *return_keyword;
     const char *continue_keyword;
+    const char *cast_keyword;
     const char *enum_keyword;
 } keywords;
 
@@ -47,6 +48,7 @@ void keywords_init() {
     INIT_KEYWORD(break);
     INIT_KEYWORD(return);
     INIT_KEYWORD(continue);
+    INIT_KEYWORD(cast);
     INIT_KEYWORD(enum);
 
     start_keywords = keywords.func_keyword;
@@ -99,6 +101,8 @@ const char *token_kind_names[] = {
         [TOKEN_MOD_ASSIGN] = "%=",
         [TOKEN_LSHIFT_ASSIGN] = "<<=",
         [TOKEN_RSHIFT_ASSIGN] = ">>=",
+        [TOKEN_BIN_NOT] = "~",
+        [TOKEN_NOT] = "!",
         [TOKEN_KEYWORD] = "keyword",
         [TOKEN_COLON] = ":",
         [TOKEN_LPAREN] = "(",
@@ -419,7 +423,9 @@ void next_token() {
         CASE1(',', TOKEN_COMMA)
         CASE1(';', TOKEN_SEMICOLON)
         CASE1('?', TOKEN_QUESTION_MARK)
+        CASE1('~', TOKEN_BIN_NOT)
         CASE2('=', '=', TOKEN_ASSIGN, TOKEN_EQ)
+        CASE2('!', '=', TOKEN_NOT, TOKEN_NOTEQ)
         CASE2(':', '=', TOKEN_COLON, TOKEN_AUTO_ASSIGN)
         CASE2('/', '=', TOKEN_DIV, TOKEN_DIV_ASSIGN)
         CASE2('*', '=', TOKEN_MUL, TOKEN_MUL_ASSIGN)
@@ -495,7 +501,6 @@ void init_stream(const char* str) {
 }
 
 void keywords_test() {
-    keywords_init();
     assert(is_keyword_str(start_keywords));
     assert(is_keyword_str(end_keywords));
     for (const char **it = keywords_buf; it != buf_end(keywords_buf); it++) {

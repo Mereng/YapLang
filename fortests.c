@@ -1,3 +1,5 @@
+#include <ast.h>
+
 void print_declaration(Declaration *d);
 int indent = 0;
 
@@ -30,7 +32,11 @@ void print_type(Typespec *type) {
                 print_type(*it);
             }
             printf(") ");
-            print_type(type->func.return_type);
+            if (type->func.return_type) {
+                print_type(type->func.return_type);
+            } else {
+                printf("void");
+            }
             printf(" )");
             break;
         default:
@@ -114,12 +120,12 @@ void print_expression(Expression *expr) {
             printf(")");
             break;
         case EXPR_SIZEOF_TYPE:
-            printf("(sizeof type ");
+            printf("(sizeof-type ");
             print_type(expr->size_of_type);
             printf(")");
             break;
         case EXPR_SIZEOF_EXPR:
-            printf("(sizeof expr");
+            printf("(sizeof-expr ");
             print_expression(expr->size_of_expr);
             printf(")");
             break;
@@ -277,6 +283,8 @@ void print_declaration(Declaration *d) {
             printf(") ");
             if (d->func.return_type) {
                 print_type(d->func.return_type);
+            } else {
+                printf("void");
             }
             indent++;
             print_statement_block(d->func.body);
@@ -290,8 +298,10 @@ void print_declaration(Declaration *d) {
             } else {
                 printf("nil");
             }
-            printf(" ");
-            print_expression(d->var.expr);
+            if (d->var.expr) {
+                printf(" ");
+                print_expression(d->var.expr);
+            }
             printf(")");
             break;
         case DECL_CONST:
@@ -419,7 +429,7 @@ void parser_test() {
             "func fib(n:int):int {if (n == 0) { return 0; } else if (n == 1) { return 1; } else { return fib(n - 1) + fib(n - 2); } }",
             "var i = sizeof(10+20);",
             "var p :Vec3={1,2,3};",
-            "const foo = sizeof(:float*[50])"
+            "const foo = sizeof(:float*[50])",
             "typedef t = func(int):double[1000]",
             "struct Vec3 {x,y,z:float;}",
             "union test {one:Vec3; two:Vec2;}",
@@ -441,17 +451,32 @@ void parser_test() {
 }
 
 void resolver_test() {
-    const char *integer = str_intern("int");
-    entity_append_type(integer, type_int_link);
+    entity_append_type(str_intern("int"), type_int);
+    entity_append_type(str_intern("void"), type_void);
 
     const char *code[] = {
-            "const foo = sizeof(pointer) + 1",
-            "var pointer: BarType*;",
-            "struct BarType {i : int[sizeof(&pointer)];}",
-            "var bar: BarType;",
-            "typedef S = int[m + foo]",
-            "const m = sizeof(bar.i);",
-            "var foobar = &bar"
+//            "const foo = sizeof(pointer) + 1",
+//            "var pointer: BarType*;",
+//            "var t: BarType;",
+//            "var bar = BarType{};",
+//            "struct BarType {i : int;}",
+//            "typedef S = int[m + foo]",
+//            "const m = sizeof(bar.i);",
+//            "var foobar = &bar"
+//            "var pi = 3.14;",
+//            "var foo: int[5] = {1, 2, 3, 4};",
+//            "var bar = &foo[1]"
+//            "struct Vec2 {x, y :int;}",
+//            "func sumVec(a : Vec2, b : Vec2) : Vec2 {return {a.x+b.x, a.y+b.y};}",
+//            "var x = sumVec({1,2}, {3,4})"
+//            "union foo {i : int; p : int*;}",
+            "var i = 8;",
+//              "var bar = foo {i, &i}"
+//              "var foo = \"foo\""
+            "var p = cast(int*, i);",
+            "func foo (a : int*) {a++;}",
+            "var f : func(int);",
+//            "struct test_dup {x : int; x : int*;}"
     };
 
     for (size_t i = 0; i < sizeof(code) / sizeof(*code); i++) {
@@ -462,12 +487,18 @@ void resolver_test() {
     for (Entity **it = entities; it != buf_end(entities); it++) {
         Entity *entity = *it;
         resolve_entity(entity);
-        if ((*it)->kind == ENTITY_TYPE) {
+        if (entity->kind == ENTITY_TYPE) {
             complete_type(entity->type);
         }
     }
 
     for (Entity **it = entities_ordered; it != buf_end(entities_ordered); it++) {
-        printf("%s\n", (*it)->name);
+        Entity *entity = *it;
+        if (entity->decl) {
+            print_declaration(entity->decl);
+        } else {
+            printf("%s", entity->name);
+        }
+        printf("\n");
     }
 }
