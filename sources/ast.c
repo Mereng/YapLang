@@ -1,6 +1,7 @@
 #include <malloc.h>
 #include <memory.h>
 #include <inttypes.h>
+#include <ast.h>
 
 
 #include "ast.h"
@@ -179,11 +180,11 @@ Expression* expression_field(Expression *operand, const char *field) {
     return expr;
 }
 
-Expression* expression_compound(Typespec *type, Expression **args, size_t num_args) {
+Expression* expression_compound(Typespec *type, CompoundField *fields, size_t num_fields) {
     Expression *expr = expression_new(EXPR_COMPOUND);
     expr->compound.type = type;
-    expr->compound.args = args;
-    expr->compound.num_args = num_args;
+    expr->compound.fields = fields;
+    expr->compound.num_fields = num_fields;
     return expr;
 }
 

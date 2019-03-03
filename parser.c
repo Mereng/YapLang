@@ -9,17 +9,36 @@ const char *parse_name() {
     return name;
 }
 
+CompoundField parse_expression_compound_field() {
+    if (match_token(TOKEN_LBRACKET)) {
+        Expression *index = parse_expression();
+        expect_token(TOKEN_RBRACKET);
+        expect_token(TOKEN_ASSIGN);
+        return (CompoundField){COMPOUNDFIELD_INDEX, parse_expression(), .index = index};
+    } else {
+        Expression *expr = parse_expression();
+        if (match_token(TOKEN_ASSIGN)) {
+            if (expr->kind != EXPR_NAME) {
+                fatal("Named initializer in compoound literal must be field name");
+            }
+            return (CompoundField){COMPOUNDFIELD_NAME, parse_expression(), .name = expr->name};
+        } else {
+            return (CompoundField){COMPOUNDFIELD_DEFAULT, expr};
+        }
+    }
+}
+
 Expression* parse_expression_compound(Typespec *type) {
     expect_token(TOKEN_LBRACE);
-    Expression **args = NULL;
+    CompoundField *fields = NULL;
     if (!is_token(TOKEN_RBRACE)) {
-        buf_push(args, parse_expression());
+        buf_push(fields, parse_expression_compound_field());
         while (match_token(TOKEN_COMMA)) {
-            buf_push(args, parse_expression());
+            buf_push(fields, parse_expression_compound_field());
         }
     }
     expect_token(TOKEN_RBRACE);
-    return expression_compound(type, ast_dup(args, buf_sizeof(args)), buf_len(args));
+    return expression_compound(type, ast_dup(fields, buf_sizeof(fields)), buf_len(fields));
 }
 
 Expression* parse_expression_operand() {

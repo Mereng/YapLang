@@ -64,12 +64,23 @@ void print_expression(Expression *expr) {
             if (expr->compound.type) {
                 print_type(expr->compound.type);
             } else {
-                printf("nil");
+                printf("nil ");
             }
-            for (Expression **it = expr->compound.args; it != expr->compound.args + expr->compound.num_args; it++) {
+            for (CompoundField *it = expr->compound.fields; it != expr->compound.fields + expr->compound.num_fields; it++) {
                 printf(" ");
-                print_expression(*it);
+                if (it->kind == COMPOUNDFIELD_DEFAULT) {
+                    printf("(nil ");
+                } else if (it->kind == COMPOUNDFIELD_NAME) {
+                    printf("(name %s ", it->name);
+                } else {
+                    printf("(index ");
+                    print_expression(it->index);
+                    printf(" ");
+                }
+                print_expression(it->init);
+                printf(")");
             }
+            printf(")");
             break;
         case EXPR_CAST:
             printf("(cast ");
@@ -360,7 +371,6 @@ void expr_test() {
             expression_cast(typespec_pointer(typespec_name("float")), expression_name("void_ptr")),
             expression_call(expression_name("sum"), (Expression*[]){expression_int(2), expression_int(5)}, 2),
             expression_index(expression_field(expression_name("user"), "photos"), expression_int(2)),
-            expression_compound(typespec_name("Vec3"),(Expression*[]){expression_float(0.1), expression_float(1.0), expression_float(-0.5)}, 3)
     };
 
     for (Expression **it = exprs; it != exprs + sizeof(exprs) / sizeof(*exprs) ; it++) {
@@ -468,11 +478,11 @@ void resolver_test() {
 //            "var foo: int[5] = {1, 2, 3, 4};",
 //            "var bar = &foo[1]"
             "struct Vec2 {x, y :int;}",
-            "func sumVec(a : Vec2, b : Vec2) : Vec2 {return {a.x+b.x, a.y+b.y};}",
-            "var v: Vec2[2][2] = {{{1, 2}, {3, 4}}, {{5, 6}, {7, 8}}};",
+//            "func sumVec(a : Vec2, b : Vec2) : Vec2 {return {a.x+b.x, a.y+b.y};}",
+//            "var v: Vec2[2][2] = {{{1, 2}, {3, 4}}, {{5, 6}, {7, 8}}};",
 //            "var x = sumVec({1,2}, {3,4})"
-//            "union foo {i : int; p : int*;}",
-//            "var i = 8;",
+            "union foo {i : int; p : int*;}",
+            "var i = 8;",
 //            "var bar = foo {i, &i}"
 //            "var foo = \"foo\""
 //            "var p = cast(int*, i);",
@@ -482,6 +492,8 @@ void resolver_test() {
 //            "struct a {c: char;}",
 //            "struct b {aa: a; i : int;}",
 //            "struct d {bb: b;}",
+            "var u = foo{p = cast(int*, 42)};",
+            "var arr:int[512] = {1, 2, 3, [50] = 51, [53] = 54};"
     };
 
     for (size_t i = 0; i < sizeof(code) / sizeof(*code); i++) {

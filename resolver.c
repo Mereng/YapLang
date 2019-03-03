@@ -284,7 +284,7 @@ void complete_type(Type *type) {
 }
 
 Entity* entity_new(EntityKind kind, const char *name, Declaration *declaration) {
-    Entity *entity = calloc(1, sizeof(Declaration));
+    Entity *entity = calloc(1, sizeof(Entity));
     entity->kind = kind;
     entity->name = name;
     entity->decl = declaration;
@@ -417,6 +417,7 @@ int64_t evan_binary_int (TokenKind op, int64_t left, int64_t right) {
 Entity* resolve_entity_name(const char *name);
 ResolvedExpression resolve_expression_expected_type(Expression *expr, Type *expected_type);
 ResolvedExpression resolve_expression(Expression *expr);
+int64_t resolve_const_expression(Expression *expr);
 
 ResolvedExpression pointer_decay(ResolvedExpression expr) {
     if (expr.type->kind == TYPE_ARRAY) {
@@ -497,6 +498,16 @@ ResolvedExpression resolve_expression_field(Expression *expr) {
     fatal("No field named %s on type", expr->field.name);
 }
 
+size_t aggregate_field_index(Type *type, const char *name) {
+    for (size_t i =0; i < type->aggregate.num_fields; i++) {
+        if (type->aggregate.fields[i].name == name) {
+            return i;
+        }
+    }
+    fatal("Field %s in compound literal not found in struct or union", name);
+    return 0;
+}
+
 ResolvedExpression resolve_expression_compound(Expression *expr, Type *expected_type) {
     if (!expected_type && !expr->compound.type) {
         fatal("Impossible to determine type of compound literal");
@@ -517,25 +528,42 @@ ResolvedExpression resolve_expression_compound(Expression *expr, Type *expected_
     }
 
     if (type->kind == TYPE_STRUCT || type->kind == TYPE_UNION) {
-        if (expr->compound.num_args > type->aggregate.num_fields) {
-            fatal("Compound literal has to many fields");
-        }
+        size_t index = 0;
+        for (size_t i = 0; i < expr->compound.num_fields; i++) {
+            CompoundField field = expr->compound.fields[i];
+            if (field.kind == COMPOUNDFIELD_INDEX) {
+                fatal("Index in compound literal for struct or union not allowed");
+            } else if (field.kind == COMPOUNDFIELD_NAME) {
+                index = aggregate_field_index(type, field.name);
+            }
+            if (index >= type->aggregate.num_fields) {
+                fatal("Field initializer in struct or union compound out of range");
+            }
 
-        for (size_t i = 0; i < expr->compound.num_args; i++) {
-            ResolvedExpression field = resolve_expression_expected_type(expr->compound.args[i], type->aggregate.fields[i].type);
-            if (field.type != type->aggregate.fields[i].type) {
+            ResolvedExpression init = resolve_expression_expected_type(expr->compound.fields[i].init, type->aggregate.fields[index].type);
+            if (init.type != type->aggregate.fields[index].type) {
                 fatal("Compound literal field type mismatch");
             }
+            index++;
         }
     } else {
-        if (expr->compound.num_args > type->array.size) {
-            fatal("Compound literal has too many elements");
-        }
-        for (size_t i = 0; i < expr->compound.num_args; i++) {
-            ResolvedExpression elem = resolve_expression_expected_type(expr->compound.args[i], type->array.base);
-            if (elem.type != type->array.base) {
-                fatal("Compound literal element type mismatch");
+        size_t index = 0;
+        for (size_t i = 0; i < expr->compound.num_fields; i++) {
+            CompoundField field = expr->compound.fields[i];
+            if (field.kind == COMPOUNDFIELD_NAME) {
+                fatal("Named field not allowed for array");
+            } else if (field.kind == COMPOUNDFIELD_INDEX) {
+                int64_t tmp_indx= (size_t)resolve_const_expression(field.index);
+                 if (tmp_indx < 0) {
+                     fatal("Field initializer index can't be negative");
+                 }
+                 index = (size_t)tmp_indx;
             }
+
+            if (index >= type->aggregate.num_fields) {
+                fatal("Field initialzer in array out of range");
+            }
+            index++;
         }
     }
     return resolved_rvalue(type);
@@ -661,12 +689,12 @@ ResolvedExpression resolve_expression(Expression *expr) {
     return resolve_expression_expected_type(expr, NULL);
 }
 
-ResolvedExpression resolve_const_expression(Expression *expr) {
+int64_t resolve_const_expression(Expression *expr) {
     ResolvedExpression result = resolve_expression(expr);
     if (!result.is_const) {
         fatal("Expected constant expression");
     }
-    return result;
+    return result.val;
 }
 
 
@@ -680,7 +708,7 @@ Type* resolve_typespec(Typespec *typespec) {
             return entity->type;
         }
         case TYPESPEC_ARRAY:
-            return type_array(resolve_typespec(typespec->array.base), (size_t)resolve_const_expression(typespec->array.size).val);
+            return type_array(resolve_typespec(typespec->array.base), (size_t)resolve_const_expression(typespec->array.size));
         case TYPESPEC_POINTER:
             return type_pointer(resolve_typespec(typespec->pointer.base));
         case TYPESPEC_FUNC: {

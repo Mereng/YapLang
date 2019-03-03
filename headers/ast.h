@@ -151,6 +151,21 @@ enum ExpressionKind {
     EXPR_SIZEOF_EXPR
 };
 
+typedef enum CompoundFieldKind {
+    COMPOUNDFIELD_DEFAULT,
+    COMPOUNDFIELD_INDEX,
+    COMPOUNDFIELD_NAME,
+} CompoundFieldKind;
+
+typedef struct CompoundField {
+    CompoundFieldKind kind;
+    Expression *init;
+    union {
+        const char *name;
+        Expression *index;
+    };
+} CompoundField;
+
 struct Expression {
     ExpressionKind kind;
     union {
@@ -160,8 +175,8 @@ struct Expression {
         const char *name;
         struct {
             Typespec *type;
-            Expression **args;
-            size_t num_args;
+            CompoundField *fields;
+            size_t num_fields;
         } compound;
         struct {
             Typespec *type;
@@ -211,7 +226,7 @@ Expression* expression_ternary(Expression *cond, Expression *then_expr, Expressi
 Expression* expression_call(Expression *operand, Expression **args, size_t num_args);
 Expression* expression_index(Expression *operand, Expression *index);
 Expression* expression_field(Expression *operand, const char *field);
-Expression* expression_compound(Typespec *type, Expression **args, size_t num_args);
+Expression* expression_compound(Typespec *type, CompoundField *fields, size_t num_fields);
 Expression* expression_sizeof_type(Typespec *type);
 Expression* expression_sizeof_expr(Expression *sizeof_expr);
 
