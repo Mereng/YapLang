@@ -453,6 +453,7 @@ void parser_test() {
 void resolver_test() {
     entity_append_type(str_intern("int"), type_int);
     entity_append_type(str_intern("void"), type_void);
+    entity_append_type(str_intern("char"), type_char);
 
     const char *code[] = {
 //            "const foo = sizeof(pointer) + 1",
@@ -466,17 +467,21 @@ void resolver_test() {
 //            "var pi = 3.14;",
 //            "var foo: int[5] = {1, 2, 3, 4};",
 //            "var bar = &foo[1]"
-//            "struct Vec2 {x, y :int;}",
-//            "func sumVec(a : Vec2, b : Vec2) : Vec2 {return {a.x+b.x, a.y+b.y};}",
+            "struct Vec2 {x, y :int;}",
+            "func sumVec(a : Vec2, b : Vec2) : Vec2 {return {a.x+b.x, a.y+b.y};}",
+            "var v: Vec2[2][2] = {{{1, 2}, {3, 4}}, {{5, 6}, {7, 8}}};",
 //            "var x = sumVec({1,2}, {3,4})"
 //            "union foo {i : int; p : int*;}",
-            "var i = 8;",
-//              "var bar = foo {i, &i}"
-//              "var foo = \"foo\""
-            "var p = cast(int*, i);",
-            "func foo (a : int*) {a++;}",
-            "var f : func(int);",
+//            "var i = 8;",
+//            "var bar = foo {i, &i}"
+//            "var foo = \"foo\""
+//            "var p = cast(int*, i);",
+//            "func foo (a : int*) {a++;}",
+//            "var f : func(int);",
 //            "struct test_dup {x : int; x : int*;}"
+//            "struct a {c: char;}",
+//            "struct b {aa: a; i : int;}",
+//            "struct d {bb: b;}",
     };
 
     for (size_t i = 0; i < sizeof(code) / sizeof(*code); i++) {

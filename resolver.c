@@ -51,6 +51,7 @@ typedef struct Entity {
 struct Type {
     TypeKind kind;
     size_t size;
+    size_t align;
     Entity *entity;
     union {
         struct {
@@ -74,9 +75,9 @@ struct Type {
 
 
 Type *type_void = &(Type){TYPE_VOID, 0};
-Type *type_int = &(Type){TYPE_INT, 4};
+Type *type_int = &(Type){TYPE_INT, 4, 4};
 Type *type_float = &(Type){TYPE_FLOAT, 4};
-Type *type_char = &(Type){TYPE_CHAR, 1};
+Type *type_char = &(Type){TYPE_CHAR, 1, 1};
 
 typedef struct ResolvedExpression {
     Type *type;
@@ -122,6 +123,7 @@ typedef struct PointerTypeCached {
 PointerTypeCached *pointer_types_cache;
 
 const size_t POINTER_SIZE = 8;
+const size_t POINTER_ALIGN = 8;
 
 Type *type_pointer(Type *base) {
     for (PointerTypeCached *it = pointer_types_cache; it != buf_end(pointer_types_cache); it++) {
@@ -132,6 +134,7 @@ Type *type_pointer(Type *base) {
 
     Type *type = type_new(TYPE_POINTER);
     type->size = POINTER_SIZE;
+    type->align = POINTER_ALIGN;
     type->pointer.base = base;
     buf_push(pointer_types_cache, ((PointerTypeCached){base, type}));
     return type;
@@ -154,6 +157,7 @@ Type* type_array(Type *base, size_t size) {
 
     Type *type = type_new(TYPE_ARRAY);
     type->size = size * base->size;
+    type->align = base->align;
     type->array.base = base;
     type->array.size = size;
     buf_push(array_type_cache, ((ArrayTypeCached){base, size, type}));
@@ -189,6 +193,7 @@ Type* type_func(Type **params, size_t num_params, Type *ret) {
 
     Type *type = type_new(TYPE_FUNC);
     type->size = POINTER_SIZE;
+    type->align = POINTER_ALIGN;
     type->func.params = calloc(num_params, sizeof(Type *));
     memcpy(type->func.params, params, num_params * sizeof(Type*));
     type->func.num_params = num_params;
@@ -210,8 +215,10 @@ Type* resolve_typespec(Typespec *typespec);
 void type_complete_struct(Type* type, TypeField *fields, size_t num_fields) {
     type->kind = TYPE_STRUCT;
     type->size = 0;
+    type->align = 0;
     for (TypeField *it = fields; it != fields + num_fields; it++) {
-        type->size += it->type->size;
+        type->size = it->type->size + ALIGN_UP(type->size, it->type->align);
+        type->align = MAX(type->align, it->type->align);
     }
     type->aggregate.fields = calloc(num_fields, sizeof(TypeField));
     memcpy(type->aggregate.fields, fields, num_fields * sizeof(TypeField));
@@ -223,6 +230,7 @@ void type_complete_union(Type* type, TypeField *fields, size_t num_fields) {
     type->size = 0;
     for (TypeField *it = fields; it != fields + num_fields; it++) {
         type->size = MAX(it->type->size, type->size);
+        type->align = MAX(it->type->align, type->align);
     }
     type->aggregate.fields = calloc(num_fields, sizeof(TypeField));
     memcpy(type->aggregate.fields, fields, num_fields * sizeof(TypeField));
@@ -259,6 +267,9 @@ void complete_type(Type *type) {
         for (const char **name = it->names; name != it->names + it->num_names; name++) {
             buf_push(fields, ((TypeField){*name, item_type}));
         }
+    }
+    if (buf_len(fields) == 0) {
+        fatal("There no fields in struct");
     }
     if (check_duplicate_fields(fields, buf_len(fields))) {
         fatal("Duplicate fields in union and struct not allowed");
@@ -511,7 +522,7 @@ ResolvedExpression resolve_expression_compound(Expression *expr, Type *expected_
         }
 
         for (size_t i = 0; i < expr->compound.num_args; i++) {
-            ResolvedExpression field = resolve_expression(expr->compound.args[i]);
+            ResolvedExpression field = resolve_expression_expected_type(expr->compound.args[i], type->aggregate.fields[i].type);
             if (field.type != type->aggregate.fields[i].type) {
                 fatal("Compound literal field type mismatch");
             }
@@ -521,7 +532,7 @@ ResolvedExpression resolve_expression_compound(Expression *expr, Type *expected_
             fatal("Compound literal has too many elements");
         }
         for (size_t i = 0; i < expr->compound.num_args; i++) {
-            ResolvedExpression elem = resolve_expression(expr->compound.args[i]);
+            ResolvedExpression elem = resolve_expression_expected_type(expr->compound.args[i], type->array.base);
             if (elem.type != type->array.base) {
                 fatal("Compound literal element type mismatch");
             }
