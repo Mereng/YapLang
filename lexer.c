@@ -264,7 +264,7 @@ void parse_char() {
     }
     stream++;
 
-    token.kind = TOKEN_CHAR;
+    token.kind = TOKEN_INT;
     token.mod = TOKENMOD_CHAR;
     token.int_val = (uint64_t) val;
 }

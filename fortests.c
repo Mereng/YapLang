@@ -493,7 +493,7 @@ void resolver_test() {
 //            "struct b {aa: a; i : int;}",
 //            "struct d {bb: b;}",
             "var u = foo{p = cast(int*, 42)};",
-            "var arr:int[512] = {1, 2, 3, [50] = 51, [53] = 54};"
+            "var arr:int[512] = {1, 2, 3, ['A'] = 51, [53] = 54};"
     };
 
     for (size_t i = 0; i < sizeof(code) / sizeof(*code); i++) {
