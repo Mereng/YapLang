@@ -481,8 +481,8 @@ void resolver_test() {
 //            "func sumVec(a : Vec2, b : Vec2) : Vec2 {return {a.x+b.x, a.y+b.y};}",
 //            "var v: Vec2[2][2] = {{{1, 2}, {3, 4}}, {{5, 6}, {7, 8}}};",
 //            "var x = sumVec({1,2}, {3,4})"
-            "union foo {i : int; p : int*;}",
-            "var i = 8;",
+//            "union foo {i : int; p : int*;}",
+//            "var i = 8;",
 //            "var bar = foo {i, &i}"
 //            "var foo = \"foo\""
 //            "var p = cast(int*, i);",
@@ -492,8 +492,14 @@ void resolver_test() {
 //            "struct a {c: char;}",
 //            "struct b {aa: a; i : int;}",
 //            "struct d {bb: b;}",
-            "var u = foo{p = cast(int*, 42)};",
-            "var arr:int[512] = {1, 2, 3, ['A'] = 51, [53] = 54};"
+//            "var u = foo{p = cast(int*, 42)};",
+//            "var arr:int[512] = {1, 2, 3, ['A'] = 51, [53] = 54};"
+            "func f1() {v := Vec2{1, 2}; i := 0; j := i; j++; i++;}",
+            "func sqr(x : int) : int {return x*x;}",
+            "func f3(n : int) : int {j := 0; for (i := 0; i < n; i++) {if (i % 2) {j++;} else if (i % 3) {j+=2;} else {j--;}} return j;}",
+            "func f4 (x:int) : int {switch(x){case 0: case 2: return 5; case 7: return 8; default: return 10;}}",
+            "func f5 (n : int): int {i:=0; while(i < n) {i++;} return i;}",
+            "func f6 (n : int): int {i:=0; do  {i++;}  while(i < n); return i;}",
     };
 
     for (size_t i = 0; i < sizeof(code) / sizeof(*code); i++) {
@@ -501,12 +507,8 @@ void resolver_test() {
         entity_append_declaration(parse_declaration());
     }
 
-    for (Entity **it = entities; it != buf_end(entities); it++) {
-        Entity *entity = *it;
-        resolve_entity(entity);
-        if (entity->kind == ENTITY_TYPE) {
-            complete_type(entity->type);
-        }
+    for (Entity **it = global_entities; it != buf_end(global_entities); it++) {
+        complete_entity(*it);
     }
 
     for (Entity **it = entities_ordered; it != buf_end(entities_ordered); it++) {

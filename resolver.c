@@ -207,7 +207,12 @@ Type* type_incomplete(Entity *entity) {
     type->entity = entity;
     return type;
 }
-Entity **entities;
+
+#define MAX_LOCAL_ENTITIES 1024
+
+Entity **global_entities;
+Entity local_entities[MAX_LOCAL_ENTITIES];
+Entity *local_entities_end = local_entities;
 Entity **entities_ordered;
 
 Type* resolve_typespec(Typespec *typespec);
@@ -326,7 +331,13 @@ Entity *entity_enum_const(const char *name, Declaration *declaration) {
 }
 
 Entity* entity_get(const char *name) {
-    for (Entity **it = entities; it != buf_end(entities); it++) {
+    for (Entity *it = local_entities_end; it != local_entities; it--) {
+        Entity *entity = it - 1;
+        if (entity->name == name) {
+            return entity;
+        }
+    }
+    for (Entity **it = global_entities; it != buf_end(global_entities); it++) {
         if ((*it)->name == name) {
             return *it;
         }
@@ -334,12 +345,32 @@ Entity* entity_get(const char *name) {
     return NULL;
 }
 
+void local_entities_push_var(const char *name, Type *type) {
+    if (local_entities_end == local_entities + MAX_LOCAL_ENTITIES) {
+        fatal("Too many local entities");
+    }
+    *local_entities_end++ = (Entity){
+        .name = name,
+        .type = type,
+        .kind = ENTITY_VAR,
+        .state = ENTITY_RESOLVED
+    };
+}
+
+Entity *local_scope_enter() {
+    return local_entities_end;
+}
+
+void local_scope_leave(Entity *ptr_end) {
+    local_entities_end = ptr_end;
+}
+
 Entity* entity_append_declaration(Declaration *declaration) {
     Entity *entity = entity_declaration(declaration);
-    buf_push(entities, entity);
+    buf_push(global_entities, entity);
     if (declaration->kind == DECL_ENUM) {
         for (EnumItem *it = declaration->enum_delc.items; it != declaration->enum_delc.items + declaration->enum_delc.num_items; it++) {
-            buf_push(entities, entity_enum_const(it->name, declaration));
+            buf_push(global_entities, entity_enum_const(it->name, declaration));
         }
     }
     return entity;
@@ -349,7 +380,7 @@ Entity* entity_append_type(const char *name, Type *type) {
     Entity *entity = entity_new(ENTITY_TYPE, name, NULL);
     entity->state = ENTITY_RESOLVED;
     entity->type = type;
-    buf_push(entities, entity);
+    buf_push(global_entities, entity);
     return entity;
 }
 
@@ -418,6 +449,7 @@ Entity* resolve_entity_name(const char *name);
 ResolvedExpression resolve_expression_expected_type(Expression *expr, Type *expected_type);
 ResolvedExpression resolve_expression(Expression *expr);
 int64_t resolve_const_expression(Expression *expr);
+void resolve_statement(Statement *stmt, Type *ret_type);
 
 ResolvedExpression pointer_decay(ResolvedExpression expr) {
     if (expr.type->kind == TYPE_ARRAY) {
@@ -516,9 +548,6 @@ ResolvedExpression resolve_expression_compound(Expression *expr, Type *expected_
     Type *type = NULL;
     if (expr->compound.type) {
         type = resolve_typespec(expr->compound.type);
-        if (expected_type && expected_type != type) {
-            fatal("Explicit compound literal doesn't match expected type");
-        }
     } else {
         type = expected_type;
     }
@@ -697,8 +726,108 @@ int64_t resolve_const_expression(Expression *expr) {
     return result.val;
 }
 
+void resolve_conditional_expression(Expression *expr) {
+    ResolvedExpression cond = resolve_expression(expr);
+    if (cond.type != type_int) {
+        fatal("Conditional expression must have type int");
+    }
+}
+
+void resolve_statement_block(StatementBlock block, Type *ret_type) {
+    Entity *entities = local_scope_enter();
+    for (size_t i = 0; i < block.num_statements; i++) {
+        resolve_statement(block.statements[i], ret_type);
+    }
+    local_scope_leave(entities);
+}
+
+void resolve_statement(Statement *stmt, Type *ret_type) {
+    switch (stmt->kind) {
+        case STMT_IF:
+            resolve_conditional_expression(stmt->if_stmt.cond);
+            resolve_statement_block(stmt->if_stmt.then, ret_type);
+            for (size_t i = 0; i < stmt->if_stmt.num_else_ifs; i++) {
+                ElseIf else_if = stmt->if_stmt.else_ifs[i];
+                resolve_conditional_expression(else_if.cond);
+                resolve_statement_block(else_if.body, ret_type);
+            }
+            if (stmt->if_stmt.else_body.statements) {
+                resolve_statement_block(stmt->if_stmt.else_body, ret_type);
+            }
+            break;
+        case STMT_FOR: {
+            Entity *entities = local_scope_enter();
+            resolve_statement(stmt->for_stmt.init, ret_type);
+            resolve_conditional_expression(stmt->for_stmt.cond);
+            resolve_statement(stmt->for_stmt.next, ret_type);
+            resolve_statement_block(stmt->for_stmt.body, ret_type);
+            local_scope_leave(entities);
+            break;
+        }
+        case STMT_WHILE:
+        case STMT_DO_WHILE:
+            resolve_conditional_expression(stmt->while_stmt.cond);
+            resolve_statement_block(stmt->while_stmt.body, ret_type);
+            break;
+        case STMT_SWITCH: {
+            ResolvedExpression expr = resolve_expression(stmt->switch_stmt.expr);
+            for (size_t i = 0; i < stmt->switch_stmt.num_cases; i++) {
+                SwitchCase _case = stmt->switch_stmt.cases[i];
+                for (size_t j = 0; j < _case.num_expressions; j++) {
+                    ResolvedExpression case_expr = resolve_expression(_case.expressions[j]);
+                    if (case_expr.type != expr.type) {
+                        fatal("Case expression in switch type mismatch");
+                    }
+                }
+                resolve_statement_block(_case.body, ret_type);
+            }
+            break;
+        }
+        case STMT_ASSIGN: {
+            ResolvedExpression left = resolve_expression(stmt->assign.left);
+            if (stmt->assign.right) {
+                ResolvedExpression right = resolve_expression_expected_type(stmt->assign.right, left.type);
+                if (left.type != right.type) {
+                    fatal("Left operand type of assignment doesn't match right operand");
+                }
+            }
+            if (!left.is_lvalue) {
+                fatal("Can't assign to non-lvalue");
+            }
+
+            if (stmt->assign.op != TOKEN_ASSIGN && left.type != type_int) {
+                fatal("Assigment operator works only for ints");
+            }
+            break;
+        }
+        case STMT_AUTO_ASSIGN:
+            local_entities_push_var(stmt->auto_assign.name, resolve_expression(stmt->auto_assign.init).type);
+            break;
+        case STMT_RETURN:
+            if (stmt->expr) {
+                ResolvedExpression ret = resolve_expression_expected_type(stmt->expr, ret_type);
+                if (ret.type != ret_type) {
+                    fatal("Return type mismatch");
+                }
+            } else {
+                if (ret_type != type_void) {
+                    fatal("Empty return expression for function with non-void return type");
+                }
+            }
+            break;
+        case STMT_BREAK:
+        case STMT_CONTINUE:
+            break;
+        default:
+            assert(0);
+            break;
+    }
+}
 
 Type* resolve_typespec(Typespec *typespec) {
+    if (!typespec) {
+        return type_void;
+    }
     switch (typespec->kind) {
         case TYPESPEC_NAME: {
             Entity *entity = resolve_entity_name(typespec->name);
@@ -772,6 +901,16 @@ Type* resolve_declaration_func(Declaration *decl) {
     return type_func(params, buf_len(params), ret);
 }
 
+void resolve_func(Entity *entity) {
+    Entity *entities = local_scope_enter();
+    for (size_t i = 0; i < entity->decl->func.num_params; i++) {
+        FuncParam param = entity->decl->func.params[i];
+        local_entities_push_var(param.name, resolve_typespec(param.type));
+    }
+    resolve_statement_block(entity->decl->func.body, resolve_typespec(entity->decl->func.return_type));
+    local_scope_leave(entities);
+}
+
 void resolve_entity(Entity *entity) {
     if (entity->state == ENTITY_RESOLVED) {
         return;;
@@ -812,4 +951,13 @@ Entity* resolve_entity_name(const char *name) {
 
     resolve_entity(entity);
     return entity;
+}
+
+void complete_entity(Entity *entity) {
+    resolve_entity(entity);
+    if (entity->kind == ENTITY_TYPE) {
+        complete_type(entity->type);
+    } else if (entity->kind == ENTITY_FUNC) {
+        resolve_func(entity);
+    }
 }
