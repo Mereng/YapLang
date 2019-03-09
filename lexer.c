@@ -63,6 +63,8 @@ static inline bool is_keyword_str(const char *str) {
 
 Token token;
 const char *stream;
+const char *line_start;
+size_t line_number;
 
 const char *token_kind_names[] = {
         [TOKEN_EOF] = "EOF",
@@ -338,10 +340,12 @@ void next_token() {
     switch (*stream) {
         case ' ': case '\n': case '\t': case '\r': case '\v':
             while (isspace(*stream)) {
-                stream++;
+                if (*stream++ == '\n') {
+                    line_start = stream;
+                    line_number++;
+                }
             }
             goto top;
-            break;
         case '\'':
             parse_char();
             break;
@@ -413,6 +417,20 @@ void next_token() {
                 stream++;
             }
             break;
+        case '/':
+            token.kind = TOKEN_DIV;
+            stream++;
+            if (*stream == '=') {
+                token.kind = TOKEN_DIV_ASSIGN;
+                stream++;
+            } else if (*stream == '/') {
+                stream++;
+                while (stream && *stream != '\n') {
+                    stream++;
+                }
+                goto top;
+            }
+            break;
         CASE1('\0', TOKEN_EOF)
         CASE1('(', TOKEN_LPAREN)
         CASE1(')', TOKEN_RPAREN)
@@ -427,7 +445,6 @@ void next_token() {
         CASE2('=', '=', TOKEN_ASSIGN, TOKEN_EQ)
         CASE2('!', '=', TOKEN_NOT, TOKEN_NOTEQ)
         CASE2(':', '=', TOKEN_COLON, TOKEN_AUTO_ASSIGN)
-        CASE2('/', '=', TOKEN_DIV, TOKEN_DIV_ASSIGN)
         CASE2('*', '=', TOKEN_MUL, TOKEN_MUL_ASSIGN)
         CASE2('^', '=', TOKEN_XOR, TOKEN_XOR_ASSIGN)
         CASE2('%', '=', TOKEN_MOD, TOKEN_MOD_ASSIGN)
@@ -497,6 +514,8 @@ static inline bool expect_token(TokenKind kind) {
 
 void init_stream(const char* str) {
     stream = str;
+    line_start = stream;
+    line_number = 1;
     next_token();
 }
 

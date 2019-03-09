@@ -1,78 +1,5 @@
 #include <ast.h>
 
-typedef enum TypeKind {
-    TYPE_NONE,
-    TYPE_VOID,
-    TYPE_INT,
-    TYPE_FLOAT,
-    TYPE_CHAR,
-    TYPE_STRUCT,
-    TYPE_UNION,
-    TYPE_ARRAY,
-    TYPE_POINTER,
-    TYPE_FUNC,
-    TYPE_INCOMPLETE,
-    TYPE_COMPLETING
-} TypeKind;
-
-typedef struct Type Type;
-
-typedef struct TypeField {
-    const char *name;
-    Type *type;
-} TypeField;
-
-
-typedef enum EntityState {
-    ENTITY_UNRESOLVED,
-    ENTITY_RESOLVING,
-    ENTITY_RESOLVED
-} EntityState;
-
-typedef enum EntityKind {
-    ENTITY_NONE,
-    ENTITY_VAR,
-    ENTITY_CONST,
-    ENTITY_TYPE,
-    ENTITY_ENUM_CONST,
-    ENTITY_FUNC
-} EntityKind;
-
-typedef struct Entity {
-    EntityKind kind;
-    EntityState state;
-    const char *name;
-    Declaration *decl;
-    Type *type;
-    int64_t val;
-
-} Entity;
-
-struct Type {
-    TypeKind kind;
-    size_t size;
-    size_t align;
-    Entity *entity;
-    union {
-        struct {
-            TypeField *fields;
-            size_t num_fields;
-        } aggregate;
-        struct {
-            Type *base;
-            size_t size;
-        } array;
-        struct {
-            Type *base;
-        } pointer;
-        struct {
-            Type **params;
-            size_t num_params;
-            Type *ret;
-        } func;
-    };
-};
-
 
 Type *type_void = &(Type){TYPE_VOID, 0};
 Type *type_int = &(Type){TYPE_INT, 4, 4};
@@ -106,14 +33,6 @@ ResolvedExpression resolved_const(int64_t val) {
         .val = val
     };
 }
-
-
-Type *type_new(TypeKind kind) {
-    Type *type = calloc(1, sizeof(Type));
-    type->kind = kind;
-    return type;
-}
-
 
 typedef struct PointerTypeCached {
     Type *base;
@@ -194,9 +113,9 @@ Type* type_func(Type **params, size_t num_params, Type *ret) {
     Type *type = type_new(TYPE_FUNC);
     type->size = POINTER_SIZE;
     type->align = POINTER_ALIGN;
-    type->func.params = calloc(num_params, sizeof(Type *));
-    memcpy(type->func.params, params, num_params * sizeof(Type*));
-    type->func.num_params = num_params;
+    type->func.args = calloc(num_params, sizeof(Type *));
+    memcpy(type->func.args, params, num_params * sizeof(Type*));
+    type->func.num_args = num_params;
     type->func.ret = ret;
     buf_push(func_type_cache, ((FuncTypeCached){params, num_params, ret, type}));
     return type;
@@ -367,6 +286,7 @@ void local_scope_leave(Entity *ptr_end) {
 
 Entity* entity_append_declaration(Declaration *declaration) {
     Entity *entity = entity_declaration(declaration);
+    declaration->entity = entity;
     buf_push(global_entities, entity);
     if (declaration->kind == DECL_ENUM) {
         for (EnumItem *it = declaration->enum_delc.items; it != declaration->enum_delc.items + declaration->enum_delc.num_items; it++) {
@@ -478,7 +398,7 @@ ResolvedExpression resolve_expression_unary(Expression *expr) {
         case TOKEN_MUL:
             operand = pointer_decay(operand);
             if (operand.type->kind != TYPE_POINTER) {
-                fatal("Can't dereference non pointer type");
+                fatal("Can't dereference non pointer typespec");
             }
             return resolved_lvalue(operand.type->pointer.base);
         case TOKEN_BIN_AND:
@@ -527,7 +447,7 @@ ResolvedExpression resolve_expression_field(Expression *expr) {
         }
     }
 
-    fatal("No field named %s on type", expr->field.name);
+    fatal("No field named %s on typespec", expr->field.name);
 }
 
 size_t aggregate_field_index(Type *type, const char *name) {
@@ -542,7 +462,7 @@ size_t aggregate_field_index(Type *type, const char *name) {
 
 ResolvedExpression resolve_expression_compound(Expression *expr, Type *expected_type) {
     if (!expected_type && !expr->compound.type) {
-        fatal("Impossible to determine type of compound literal");
+        fatal("Impossible to determine typespec of compound literal");
     }
 
     Type *type = NULL;
@@ -571,7 +491,7 @@ ResolvedExpression resolve_expression_compound(Expression *expr, Type *expected_
 
             ResolvedExpression init = resolve_expression_expected_type(expr->compound.fields[i].init, type->aggregate.fields[index].type);
             if (init.type != type->aggregate.fields[index].type) {
-                fatal("Compound literal field type mismatch");
+                fatal("Compound literal field typespec mismatch");
             }
             index++;
         }
@@ -605,15 +525,15 @@ ResolvedExpression resolve_expression_call(Expression *expr) {
         fatal("Calling non-function value");
     }
 
-    if (expr->call.num_args != operand.type->func.num_params) {
+    if (expr->call.num_args != operand.type->func.num_args) {
         fatal("Calling function with wrong number of arguments ");
     }
 
     for (size_t i = 0; i < expr->call.num_args; i++) {
-        Type *param = operand.type->func.params[i];
+        Type *param = operand.type->func.args[i];
         ResolvedExpression arg = resolve_expression_expected_type(expr->call.args[i], param);
         if (arg.type != param) {
-            fatal("Call argument expression type doesn't match expected type");
+            fatal("Call argument expression typespec doesn't match expected typespec");
         }
     }
 
@@ -623,7 +543,7 @@ ResolvedExpression resolve_expression_call(Expression *expr) {
 ResolvedExpression resolve_expression_ternary(Expression *expr, Type *expected_type) {
     ResolvedExpression cond = pointer_decay(resolve_expression(expr->ternary.cond));
     if (cond.type->kind != TYPE_INT && cond.type->kind != TYPE_POINTER) {
-        fatal("Condition expression of ternary operator ? must have type int or ptr");
+        fatal("Condition expression of ternary operator ? must have typespec int or ptr");
     }
 
     ResolvedExpression then_ex = resolve_expression_expected_type(expr->ternary.then_ex, expected_type);
@@ -648,70 +568,90 @@ ResolvedExpression resolve_expression_index(Expression *expr) {
     ResolvedExpression index = resolve_expression(expr->index.index);
 
     if (index.type->kind != TYPE_INT) {
-        fatal("Index must have type int");
+        fatal("Index must have typespec int");
     }
     return resolved_lvalue(operand.type->pointer.base);
 }
 
 ResolvedExpression resolve_expression_cast(Expression *expr) {
-    Type *type = resolve_typespec(expr->cast.type);
+    Type *type = resolve_typespec(expr->cast.typespec);
     ResolvedExpression result = pointer_decay(resolve_expression(expr->cast.expr));
     if (type->kind == TYPE_POINTER) {
         if (result.type->kind != TYPE_POINTER && result.type->kind != TYPE_INT) {
-            fatal("Invalid cast to pointer type");
+            fatal("Invalid cast to pointer typespec");
         }
     } else if (type->kind == TYPE_INT) {
         if (result.type->kind != TYPE_POINTER && result.type->kind != TYPE_INT) {
-            fatal("Invalid cast to int type");
+            fatal("Invalid cast to int typespec");
         }
     } else {
-        fatal("Invalid target cast type");
+        fatal("Invalid target cast typespec");
     }
 
     return resolved_rvalue(type);
 }
 
 ResolvedExpression resolve_expression_expected_type(Expression *expr, Type *expected_type) {
+    ResolvedExpression resolved;
     switch (expr->kind) {
         case EXPR_INT:
-            return resolved_const(expr->int_val);
+            resolved = resolved_const(expr->int_val);
+            break;
         case EXPR_FLOAT:
-            return resolved_rvalue(type_float);
+            resolved = resolved_rvalue(type_float);
+            break;
         case EXPR_STR:
-            return resolved_rvalue(type_pointer(type_char));
+            resolved = resolved_rvalue(type_pointer(type_char));
+            break;
         case EXPR_NAME:
-            return resolve_expression_name(expr);
+            resolved = resolve_expression_name(expr);
+            break;
         case EXPR_UNARY:
-            return resolve_expression_unary(expr);
+            resolved = resolve_expression_unary(expr);
+            break;
         case EXPR_BINARY:
-            return resolve_expression_binary(expr);
+            resolved = resolve_expression_binary(expr);
+            break;
         case EXPR_SIZEOF_EXPR: {
             ResolvedExpression result = resolve_expression(expr->size_of_expr);
             Type *type = result.type;
             complete_type(type);
-            return resolved_const(type->size);
+            resolved = resolved_const(type->size);
+            break;
         }
         case EXPR_SIZEOF_TYPE: {
             Type *type = resolve_typespec(expr->size_of_type);
             complete_type(type);
-            return resolved_const(type->size);
+            resolved = resolved_const(type->size);
+            break;
         }
         case EXPR_FIELD:
-            return resolve_expression_field(expr);
+            resolved = resolve_expression_field(expr);
+            break;
         case EXPR_COMPOUND:
-            return resolve_expression_compound(expr, expected_type);
+            resolved = resolve_expression_compound(expr, expected_type);
+            break;
         case EXPR_CALL:
-            return resolve_expression_call(expr);
+            resolved = resolve_expression_call(expr);
+            break;
         case EXPR_TERNARY:
-            return resolve_expression_ternary(expr, expected_type);
+            resolved = resolve_expression_ternary(expr, expected_type);
+            break;
         case EXPR_INDEX:
-            return resolve_expression_index(expr);
+            resolved = resolve_expression_index(expr);
+            break;
         case EXPR_CAST:
-            return resolve_expression_cast(expr);
+            resolved = resolve_expression_cast(expr);
+            break;
         default:
             assert(0);
             break;
     }
+
+    if (resolved.type) {
+        expr->type = resolved.type;
+    }
+    return resolved;
 }
 
 ResolvedExpression resolve_expression(Expression *expr) {
@@ -729,7 +669,7 @@ int64_t resolve_const_expression(Expression *expr) {
 void resolve_conditional_expression(Expression *expr) {
     ResolvedExpression cond = resolve_expression(expr);
     if (cond.type != type_int) {
-        fatal("Conditional expression must have type int");
+        fatal("Conditional expression must have typespec int");
     }
 }
 
@@ -776,7 +716,7 @@ void resolve_statement(Statement *stmt, Type *ret_type) {
                 for (size_t j = 0; j < _case.num_expressions; j++) {
                     ResolvedExpression case_expr = resolve_expression(_case.expressions[j]);
                     if (case_expr.type != expr.type) {
-                        fatal("Case expression in switch type mismatch");
+                        fatal("Case expression in switch typespec mismatch");
                     }
                 }
                 resolve_statement_block(_case.body, ret_type);
@@ -788,7 +728,7 @@ void resolve_statement(Statement *stmt, Type *ret_type) {
             if (stmt->assign.right) {
                 ResolvedExpression right = resolve_expression_expected_type(stmt->assign.right, left.type);
                 if (left.type != right.type) {
-                    fatal("Left operand type of assignment doesn't match right operand");
+                    fatal("Left operand typespec of assignment doesn't match right operand");
                 }
             }
             if (!left.is_lvalue) {
@@ -807,11 +747,11 @@ void resolve_statement(Statement *stmt, Type *ret_type) {
             if (stmt->expr) {
                 ResolvedExpression ret = resolve_expression_expected_type(stmt->expr, ret_type);
                 if (ret.type != ret_type) {
-                    fatal("Return type mismatch");
+                    fatal("Return typespec mismatch");
                 }
             } else {
                 if (ret_type != type_void) {
-                    fatal("Empty return expression for function with non-void return type");
+                    fatal("Empty return expression for function with non-void return typespec");
                 }
             }
             break;
@@ -828,32 +768,41 @@ Type* resolve_typespec(Typespec *typespec) {
     if (!typespec) {
         return type_void;
     }
+    Type *type = NULL;
     switch (typespec->kind) {
         case TYPESPEC_NAME: {
             Entity *entity = resolve_entity_name(typespec->name);
             if (entity->kind != ENTITY_TYPE) {
-                fatal("%s must be type", typespec->name);
+                fatal("%s must be typespec", typespec->name);
             }
-            return entity->type;
+            type = entity->type;
+            break;
         }
         case TYPESPEC_ARRAY:
-            return type_array(resolve_typespec(typespec->array.base), (size_t)resolve_const_expression(typespec->array.size));
+            type = type_array(resolve_typespec(typespec->array.base), (size_t)resolve_const_expression(typespec->array.size));
+            break;
         case TYPESPEC_POINTER:
-            return type_pointer(resolve_typespec(typespec->pointer.base));
+            type = type_pointer(resolve_typespec(typespec->pointer.base));
+            break;
         case TYPESPEC_FUNC: {
             Type **args = NULL;
-            for (Typespec **it = typespec->func.args_types; it != typespec->func.args_types + typespec->func.num_args_types; it++) {
+            for (Typespec **it = typespec->func.args; it != typespec->func.args + typespec->func.num_args; it++) {
                 buf_push(args, resolve_typespec(*it));
             }
             Type *ret = type_void;
-            if (typespec->func.return_type) {
-                ret = resolve_typespec(typespec->func.return_type);
+            if (typespec->func.ret) {
+                ret = resolve_typespec(typespec->func.ret);
             }
-            return type_func(args, buf_len(args), ret);
+            type = type_func(args, buf_len(args), ret);
+            break;
         }
         default:
+            assert(0);
             break;
     }
+
+    typespec->type = type;
+    return type;
 }
 
 Type* resolve_declaration_type(Declaration *decl) {
@@ -870,7 +819,7 @@ Type* resolve_declaration_var(Declaration *decl) {
     if (decl->var.expr) {
         ResolvedExpression result = resolve_expression_expected_type(decl->var.expr, type);
         if (type && result.type != type) {
-            fatal("Declared var types doesn't not match inferred type");
+            fatal("Declared var types doesn't not match inferred typespec");
         }
 
         type = result.type;
@@ -959,5 +908,24 @@ void complete_entity(Entity *entity) {
         complete_type(entity->type);
     } else if (entity->kind == ENTITY_FUNC) {
         resolve_func(entity);
+    }
+}
+
+void complete_entities() {
+    for (Entity **it = global_entities; it != buf_end(global_entities); it++) {
+        complete_entity(*it);
+    }
+}
+
+void init_entities() {
+    entity_append_type(str_intern("void"), type_void);
+    entity_append_type(str_intern("char"), type_char);
+    entity_append_type(str_intern("int"), type_int);
+    entity_append_type(str_intern("float"), type_float);
+}
+
+void entities_append_declaration_list(DeclarationList *decl_list) {
+    for (size_t i = 0; i < decl_list->num_declarations; i++) {
+        entity_append_declaration(decl_list->declarations[i]);
     }
 }

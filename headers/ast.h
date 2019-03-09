@@ -6,13 +6,15 @@
 #include <token.h>
 #include <stdbool.h>
 
+typedef struct Type Type;
 typedef enum TypespecKind TypespecKind;
 typedef struct Typespec Typespec;
-typedef enum DeclarationKind DeclarationKind;
 typedef struct EnumItem EnumItem;
 typedef struct AggregateItem AggregateItem;
 typedef struct FuncParam FuncParam;
+typedef enum DeclarationKind DeclarationKind;
 typedef struct Declaration Declaration;
+typedef struct DeclarationList DeclarationList;
 typedef enum ExpressionKind ExpressionKind;
 typedef struct Expression Expression;
 typedef enum StatementKind StatementKind;
@@ -25,6 +27,80 @@ typedef struct StatementBlock StatementBlock;
 void* ast_alloc(size_t size);
 void* ast_dup(const void *src, size_t size);
 
+typedef enum EntityState {
+    ENTITY_UNRESOLVED,
+    ENTITY_RESOLVING,
+    ENTITY_RESOLVED
+} EntityState;
+
+typedef enum EntityKind {
+    ENTITY_NONE,
+    ENTITY_VAR,
+    ENTITY_CONST,
+    ENTITY_TYPE,
+    ENTITY_ENUM_CONST,
+    ENTITY_FUNC
+} EntityKind;
+
+typedef struct Entity {
+    EntityKind kind;
+    EntityState state;
+    const char *name;
+    Declaration *decl;
+    Type *type;
+    int64_t val;
+
+} Entity;
+
+
+typedef struct TypeField {
+    const char *name;
+    Type *type;
+} TypeField;
+
+typedef enum TypeKind {
+    TYPE_NONE,
+    TYPE_VOID,
+    TYPE_INT,
+    TYPE_FLOAT,
+    TYPE_CHAR,
+    TYPE_STRUCT,
+    TYPE_UNION,
+    TYPE_ARRAY,
+    TYPE_POINTER,
+    TYPE_FUNC,
+    TYPE_INCOMPLETE,
+    TYPE_COMPLETING
+} TypeKind;
+
+
+struct Type {
+    TypeKind kind;
+    size_t size;
+    size_t align;
+    Entity *entity;
+    union {
+        struct {
+            TypeField *fields;
+            size_t num_fields;
+        } aggregate;
+        struct {
+            Type *base;
+            size_t size;
+        } array;
+        struct {
+            Type *base;
+        } pointer;
+        struct {
+            Type **args;
+            size_t num_args;
+            Type *ret;
+        } func;
+    };
+};
+
+Type *type_new(TypeKind kind);
+
 enum TypespecKind {
     TYPESPEC_NONE,
     TYPESPEC_ARRAY,
@@ -35,12 +111,13 @@ enum TypespecKind {
 
 struct Typespec {
     TypespecKind kind;
+    Type *type;
     union {
         const char *name;
         struct {
-            Typespec **args_types;
-            size_t num_args_types;
-            Typespec *return_type;
+            Typespec **args;
+            size_t num_args;
+            Typespec *ret;
         } func;
         struct {
             Typespec *base;
@@ -94,6 +171,7 @@ struct FuncParam {
 
 struct Declaration {
     DeclarationKind kind;
+    Entity *entity;
     const char *name;
     union {
         struct {
@@ -133,6 +211,13 @@ Declaration* declaration_const(const char *name, Expression *expr);
 Declaration* declaration_func(const char *name, FuncParam *params, size_t num_params, Typespec *ret_type, StatementBlock body);
 Declaration* declaration_typedef(const char *name, Typespec *type);
 
+struct DeclarationList {
+    Declaration **declarations;
+    size_t num_declarations;
+};
+
+DeclarationList *declaration_list_new(Declaration **declarations, size_t num);
+
 enum ExpressionKind {
     EXPR_NONE,
     EXPR_INT,
@@ -168,6 +253,7 @@ typedef struct CompoundField {
 
 struct Expression {
     ExpressionKind kind;
+    Type *type;
     union {
         int64_t int_val;
         double float_val;
@@ -179,7 +265,7 @@ struct Expression {
             size_t num_fields;
         } compound;
         struct {
-            Typespec *type;
+            Typespec *typespec;
             Expression *expr;
         } cast;
         struct {

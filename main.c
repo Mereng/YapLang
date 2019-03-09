@@ -19,17 +19,19 @@
 #include "lexer.c"
 #include "parser.c"
 #include "resolver.c"
+#include "generator.c"
 #include "fortests.c"
 
 
 int main() {
     keywords_init();
-//    buf_test();
-//    keywords_test();
-//    lex_test();
-//    str_intern_test();
+    buf_test();
+    keywords_test();
+    lex_test();
+    str_intern_test();
 //    ast_test();
 //    parser_test();
-    resolver_test();
+//    resolver_test();
+    gen_test();
     return 0;
 }

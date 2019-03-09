@@ -27,13 +27,13 @@ void print_type(Typespec *type) {
             break;
         case TYPESPEC_FUNC:
             printf("(func (");
-            for (Typespec **it = type->func.args_types; it != type->func.args_types + type->func.num_args_types; it++) {
+            for (Typespec **it = type->func.args; it != type->func.args + type->func.num_args; it++) {
                 printf(" ");
                 print_type(*it);
             }
             printf(") ");
-            if (type->func.return_type) {
-                print_type(type->func.return_type);
+            if (type->func.ret) {
+                print_type(type->func.ret);
             } else {
                 printf("void");
             }
@@ -84,7 +84,7 @@ void print_expression(Expression *expr) {
             break;
         case EXPR_CAST:
             printf("(cast ");
-            print_type(expr->cast.type);
+            print_type(expr->cast.typespec);
             print_expression(expr->cast.expr);
             printf(")");
             break;
@@ -131,7 +131,7 @@ void print_expression(Expression *expr) {
             printf(")");
             break;
         case EXPR_SIZEOF_TYPE:
-            printf("(sizeof-type ");
+            printf("(sizeof-typespec ");
             print_type(expr->size_of_type);
             printf(")");
             break;
@@ -507,9 +507,8 @@ void resolver_test() {
         entity_append_declaration(parse_declaration());
     }
 
-    for (Entity **it = global_entities; it != buf_end(global_entities); it++) {
-        complete_entity(*it);
-    }
+
+    complete_entities();
 
     for (Entity **it = entities_ordered; it != buf_end(entities_ordered); it++) {
         Entity *entity = *it;
@@ -520,4 +519,18 @@ void resolver_test() {
         }
         printf("\n");
     }
+}
+
+void gen_test() {
+    const char *code =
+            "func f6 (n : int): int {i:=0; do  {i++;}  while(i < n); return i;}\n"
+            "func foo (n : func(int, int)[8]) {return;}\n"
+    ;
+
+    init_stream(code);
+    init_entities();
+    entities_append_declaration_list(parse_file());
+    complete_entities();
+    generate_c_code();
+    printf("%s", gen_buf);
 }

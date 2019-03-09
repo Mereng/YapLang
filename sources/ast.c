@@ -24,6 +24,12 @@ void* ast_dup(const void *src, size_t size) {
     return ptr;
 }
 
+Type *type_new(TypeKind kind) {
+    Type *type = calloc(1, sizeof(Type));
+    type->kind = kind;
+    return type;
+}
+
 Typespec* typespec_new(TypespecKind kind) {
     Typespec *typespec = ast_alloc(sizeof(Typespec));
     typespec->kind = kind;
@@ -47,9 +53,9 @@ Typespec* typespec_array(Typespec *base, Expression *size) {
 }
 Typespec* typespec_func(Typespec **args, size_t num_args, Typespec *ret) {
     Typespec *typespec = typespec_new(TYPESPEC_FUNC);
-    typespec->func.args_types = args;
-    typespec->func.num_args_types = num_args;
-    typespec->func.return_type = ret;
+    typespec->func.args = args;
+    typespec->func.num_args = num_args;
+    typespec->func.ret = ret;
     return typespec;
 }
 
@@ -109,6 +115,13 @@ Declaration* declaration_typedef(const char *name, Typespec *type) {
     return decl;
 }
 
+DeclarationList *declaration_list_new(Declaration **declarations, size_t num) {
+    DeclarationList *decl_list = ast_alloc(sizeof(DeclarationList));
+    decl_list->declarations = declarations;
+    decl_list->num_declarations = num;
+    return decl_list;
+}
+
 Expression* expression_new(ExpressionKind kind) {
     Expression *expr = ast_alloc(sizeof(Declaration));
     expr->kind = kind;
@@ -136,7 +149,7 @@ Expression* expression_name(const char *name) {
 }
 Expression* expression_cast(Typespec *cast_type, Expression *cast_expr) {
     Expression *expr = expression_new(EXPR_CAST);
-    expr->cast.type = cast_type;
+    expr->cast.typespec = cast_type;
     expr->cast.expr = cast_expr;
     return expr;
 }

@@ -235,7 +235,7 @@ Typespec *parse_type_base() {
         expect_token(TOKEN_RPAREN);
         return type;
     } else {
-        fatal("Unexpected token %s in type", token_str(token));
+        fatal("Unexpected token %s in typespec", token_str(token));
     }
 }
 
@@ -552,3 +552,10 @@ Declaration* parse_declaration() {
     return decl;
 }
 
+DeclarationList* parse_file() {
+    Declaration **decls = NULL;
+    while (!is_token(TOKEN_EOF)) {
+        buf_push(decls, parse_declaration());
+    }
+    return declaration_list_new(ast_dup(decls, buf_sizeof(decls)), buf_len(decls));
+}
