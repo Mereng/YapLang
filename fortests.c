@@ -525,6 +525,11 @@ void gen_test() {
     const char *code =
             "func f6 (n : int): int {i:=0; do  {i++;}  while(i < n); return i;}\n"
             "func foo (n : func(int, int)[8]) {return;}\n"
+            "var v = Vec2{1, 5}\n"
+            "struct Vec2 {x, y :int;}\n"
+            "func fib(n:int):int {if (n == 0) { return 0; } else if (n == 1) { return 1; } else { return fib(n - 1) + fib(n - 2); } }\n"
+            "var vs: Vec2[n];\n"
+            "const n = 100\n"
     ;
 
     init_stream(code);

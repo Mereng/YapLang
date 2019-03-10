@@ -5,7 +5,7 @@ int gen_indent = 0;
 
 #define genf(...) buf_printf(gen_buf, __VA_ARGS__)
 void genln() {
-    genf("\n%*c", gen_indent * 5, '\t');
+    genf("\n%.*s", gen_indent * 4, "                                                                 ");
 }
 #define genlnf(...) (genln(), genf(__VA_ARGS__))
 
@@ -371,6 +371,7 @@ void generate_forward_declarations() {
                 break;
             case DECL_FUNC:
                 generate_func_declaration(decl);
+                genf(";");
                 break;
             default:
                 // nothing
@@ -402,7 +403,7 @@ void generate_entity(Entity *entity) {
         case DECL_CONST:
             genlnf("enum { %s = ", entity->name);
             generate_expression(decl->const_decl.expr);
-            genf("};");
+            genf(" };");
             break;
         case DECL_VAR:
             if (decl->var.type) {
