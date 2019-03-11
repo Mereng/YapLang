@@ -1,73 +1,45 @@
-void fatal(const char* fmt, ...) {
-    va_list args;
-    va_start(args, fmt);
-    printf("FATAL: ");
-    vprintf(fmt, args);
-    va_end(args);
-    exit(1);
+const char* compile_str(const char *code) {
+    init_stream(NULL, code);
+    init_entities();
+    entities_append_declaration_list(parse_file());
+    complete_entities();
+    generate_c_code();
+    const char *c_code = gen_buf;
+    gen_buf = NULL;
+    return c_code;
 }
 
-void syntax_error(const char* fmt, ...) {
-    va_list args;
-    va_start(args, fmt);
-    printf("Syntax error: ");
-    vprintf(fmt, args);
-    printf("\n");
-    va_end(args);
-}
-
-
-typedef struct InternStr {
-    size_t len;
-    const char *str;
-} InternStr;
-
-ArenaMem strs_arena;
-InternStr *interns;
-
-const char* str_intern_range(const char *start, const char *end) {
-    size_t len = end - start;
-
-    for (int i = 0; i < buf_len(interns); i++) {
-        if (interns[i].len == len && strncmp(interns[i].str, start, len) == 0) {
-            return interns[i].str;
-        }
+bool compile_file(const char *path) {
+    char *code = read_file(path);
+    if (!code) {
+        return false;
     }
-
-    char *str = arena_alloc(&strs_arena, len + 1);
-    memcpy(str, start, len);
-    str[len] = 0;
-    buf_push(interns, ((InternStr){len, str}));
-
-    return str;
+    init_stream(path, code);
+    init_entities();
+    entities_append_declaration_list(parse_file());
+    complete_entities();
+    generate_c_code();
+    const char *c_code = gen_buf;
+    gen_buf = NULL;
+    const char *c_file = replace_ext(path, "c");
+    if (!c_file) {
+        return false;
+    }
+    if (!write_file(c_file, c_code, buf_len(c_code))) {
+        return false;
+    }
+    return true;
 }
 
-const char* str_intern(const char *str) {
-    return str_intern_range(str, str + strlen(str));
-}
-
-void buf_test() {
-    int *buf = NULL;
-
-    buf_push(buf, 2);
-    buf_push(buf, 3);
-
-    assert(buf[0] == 2);
-    assert(buf[1] == 3);
-
-    buf_free(buf);
-    assert(buf == NULL);
-}
-
-
-void str_intern_test() {
-    char x[] = "Hello";
-    char y[] = "Hello";
-    assert(x != y);
-    const char *px = str_intern(x);
-    const char *py = str_intern(y);
-    assert(px == py);
-    char z[] = "hello!";
-    const char *pz = str_intern(z);
-    assert(px != pz);
+int yap_main(int argc, char **argv) {
+    if (argc < 2) {
+        printf("Usage: %s <source file>\n", argv[0]);
+        return 1;
+    }
+    keywords_init();
+    if (!compile_file(argv[1])) {
+        printf("Failed\n");
+        return 2;
+    }
+    printf("Succeeded\n");
 }

@@ -27,6 +27,11 @@ typedef struct StatementBlock StatementBlock;
 void* ast_alloc(size_t size);
 void* ast_dup(const void *src, size_t size);
 
+typedef struct SrcLocation {
+    const char *name;
+    int line;
+} SrcLocation;
+
 typedef enum EntityState {
     ENTITY_UNRESOLVED,
     ENTITY_RESOLVING,
@@ -110,6 +115,7 @@ enum TypespecKind {
 };
 
 struct Typespec {
+    SrcLocation location;
     TypespecKind kind;
     Type *type;
     union {
@@ -170,6 +176,7 @@ struct FuncParam {
 
 
 struct Declaration {
+    SrcLocation location;
     DeclarationKind kind;
     Entity *entity;
     const char *name;
@@ -252,6 +259,7 @@ typedef struct CompoundField {
 } CompoundField;
 
 struct Expression {
+    SrcLocation location;
     ExpressionKind kind;
     Type *type;
     union {
@@ -346,6 +354,7 @@ struct SwitchCase {
 };
 
 struct Statement {
+    SrcLocation location;
     StatementKind kind;
     union {
         struct {

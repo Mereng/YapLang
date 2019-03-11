@@ -174,7 +174,7 @@ bool check_duplicate_fields(TypeField *fields, size_t num_fields) {
 
 void complete_type(Type *type) {
     if (type->kind == TYPE_COMPLETING) {
-        fatal("Type dependence cycle");
+        fatal_syntax("Type dependence cycle");
     }
 
     if (type->kind != TYPE_INCOMPLETE) {
@@ -193,10 +193,10 @@ void complete_type(Type *type) {
         }
     }
     if (buf_len(fields) == 0) {
-        fatal("There no fields in struct");
+        fatal_syntax("There no fields in struct");
     }
     if (check_duplicate_fields(fields, buf_len(fields))) {
-        fatal("Duplicate fields in union and struct not allowed");
+        fatal_syntax("Duplicate fields in union and struct not allowed");
     }
     if (decl->kind == DECL_STRUCT) {
         type_complete_struct(type, fields, buf_len(fields));
@@ -266,7 +266,7 @@ Entity* entity_get(const char *name) {
 
 void local_entities_push_var(const char *name, Type *type) {
     if (local_entities_end == local_entities + MAX_LOCAL_ENTITIES) {
-        fatal("Too many local entities");
+        fatal_syntax("Too many local entities");
     }
     *local_entities_end++ = (Entity){
         .name = name,
@@ -388,7 +388,7 @@ ResolvedExpression resolve_expression_name(Expression *expr) {
     } else if (entity->kind == ENTITY_FUNC) {
         return resolved_rvalue(entity->type);
     } else {
-        fatal("%s must be var or const");
+        fatal_syntax("%s must be var or const");
     }
 }
 
@@ -398,17 +398,17 @@ ResolvedExpression resolve_expression_unary(Expression *expr) {
         case TOKEN_MUL:
             operand = pointer_decay(operand);
             if (operand.type->kind != TYPE_POINTER) {
-                fatal("Can't dereference non pointer typespec");
+                fatal_syntax("Can't dereference non pointer typespec");
             }
             return resolved_lvalue(operand.type->pointer.base);
         case TOKEN_BIN_AND:
             if (!operand.is_lvalue) {
-                fatal("Can't take address of non-lvalue");
+                fatal_syntax("Can't take address of non-lvalue");
             }
             return (ResolvedExpression){type_pointer(operand.type)};
         default:
             if (operand.type->kind != TYPE_INT) {
-                fatal("%s is working yet for ints", token_kind_names[expr->unary.op]);
+                fatal_syntax("%s is working yet for ints", token_kind_names[expr->unary.op]);
             }
 
             if (operand.is_const) {
@@ -425,7 +425,7 @@ ResolvedExpression resolve_expression_binary(Expression *expr) {
     ResolvedExpression left = resolve_expression(expr->binary.left);
     ResolvedExpression right = resolve_expression(expr->binary.right);
     if (left.type != type_int || right.type != type_int) {
-        fatal("%s is working yet for ints", token_kind_names[expr->binary.op]);
+        fatal_syntax("%s is working yet for ints", token_kind_names[expr->binary.op]);
     }
     if (left.is_const && right.is_const) {
         return resolved_const(evan_binary_int(expr->binary.op, left.val, right.val));
@@ -438,7 +438,7 @@ ResolvedExpression resolve_expression_field(Expression *expr) {
     ResolvedExpression operand = resolve_expression(expr->field.operand);
     complete_type(operand.type);
     if (operand.type->kind != TYPE_STRUCT && operand.type->kind != TYPE_UNION) {
-        fatal("Can only access fields on aggregate types");
+        fatal_syntax("Can only access fields on aggregate types");
     }
 
     for (TypeField *it = operand.type->aggregate.fields; it != operand.type->aggregate.fields + operand.type->aggregate.num_fields; it++) {
@@ -447,7 +447,7 @@ ResolvedExpression resolve_expression_field(Expression *expr) {
         }
     }
 
-    fatal("No field named %s on typespec", expr->field.name);
+    fatal_syntax("No field named %s on typespec", expr->field.name);
 }
 
 size_t aggregate_field_index(Type *type, const char *name) {
@@ -456,13 +456,13 @@ size_t aggregate_field_index(Type *type, const char *name) {
             return i;
         }
     }
-    fatal("Field %s in compound literal not found in struct or union", name);
+    fatal_syntax("Field %s in compound literal not found in struct or union", name);
     return 0;
 }
 
 ResolvedExpression resolve_expression_compound(Expression *expr, Type *expected_type) {
     if (!expected_type && !expr->compound.type) {
-        fatal("Impossible to determine typespec of compound literal");
+        fatal_syntax("Impossible to determine typespec of compound literal");
     }
 
     Type *type = NULL;
@@ -473,7 +473,7 @@ ResolvedExpression resolve_expression_compound(Expression *expr, Type *expected_
     }
     complete_type(type);
     if (type->kind != TYPE_STRUCT && type->kind != TYPE_UNION && type->kind != TYPE_ARRAY) {
-        fatal("Compound literals can only be user with struct, union or array types");
+        fatal_syntax("Compound literals can only be user with struct, union or array types");
     }
 
     if (type->kind == TYPE_STRUCT || type->kind == TYPE_UNION) {
@@ -481,17 +481,17 @@ ResolvedExpression resolve_expression_compound(Expression *expr, Type *expected_
         for (size_t i = 0; i < expr->compound.num_fields; i++) {
             CompoundField field = expr->compound.fields[i];
             if (field.kind == COMPOUNDFIELD_INDEX) {
-                fatal("Index in compound literal for struct or union not allowed");
+                fatal_syntax("Index in compound literal for struct or union not allowed");
             } else if (field.kind == COMPOUNDFIELD_NAME) {
                 index = aggregate_field_index(type, field.name);
             }
             if (index >= type->aggregate.num_fields) {
-                fatal("Field initializer in struct or union compound out of range");
+                fatal_syntax("Field initializer in struct or union compound out of range");
             }
 
             ResolvedExpression init = resolve_expression_expected_type(expr->compound.fields[i].init, type->aggregate.fields[index].type);
             if (init.type != type->aggregate.fields[index].type) {
-                fatal("Compound literal field typespec mismatch");
+                fatal_syntax("Compound literal field typespec mismatch");
             }
             index++;
         }
@@ -500,17 +500,17 @@ ResolvedExpression resolve_expression_compound(Expression *expr, Type *expected_
         for (size_t i = 0; i < expr->compound.num_fields; i++) {
             CompoundField field = expr->compound.fields[i];
             if (field.kind == COMPOUNDFIELD_NAME) {
-                fatal("Named field not allowed for array");
+                fatal_syntax("Named field not allowed for array");
             } else if (field.kind == COMPOUNDFIELD_INDEX) {
                 int64_t tmp_indx= (size_t)resolve_const_expression(field.index);
                  if (tmp_indx < 0) {
-                     fatal("Field initializer index can't be negative");
+                     fatal_syntax("Field initializer index can't be negative");
                  }
                  index = (size_t)tmp_indx;
             }
 
             if (index >= type->aggregate.num_fields) {
-                fatal("Field initialzer in array out of range");
+                fatal_syntax("Field initialzer in array out of range");
             }
             index++;
         }
@@ -522,18 +522,18 @@ ResolvedExpression resolve_expression_call(Expression *expr) {
     ResolvedExpression operand = resolve_expression(expr->call.operand);
     complete_type(operand.type);
     if (operand.type->kind != TYPE_FUNC) {
-        fatal("Calling non-function value");
+        fatal_syntax("Calling non-function value");
     }
 
     if (expr->call.num_args != operand.type->func.num_args) {
-        fatal("Calling function with wrong number of arguments ");
+        fatal_syntax("Calling function with wrong number of arguments ");
     }
 
     for (size_t i = 0; i < expr->call.num_args; i++) {
         Type *param = operand.type->func.args[i];
         ResolvedExpression arg = resolve_expression_expected_type(expr->call.args[i], param);
         if (arg.type != param) {
-            fatal("Call argument expression typespec doesn't match expected typespec");
+            fatal_syntax("Call argument expression typespec doesn't match expected typespec");
         }
     }
 
@@ -543,14 +543,14 @@ ResolvedExpression resolve_expression_call(Expression *expr) {
 ResolvedExpression resolve_expression_ternary(Expression *expr, Type *expected_type) {
     ResolvedExpression cond = pointer_decay(resolve_expression(expr->ternary.cond));
     if (cond.type->kind != TYPE_INT && cond.type->kind != TYPE_POINTER) {
-        fatal("Condition expression of ternary operator ? must have typespec int or ptr");
+        fatal_syntax("Condition expression of ternary operator ? must have typespec int or ptr");
     }
 
     ResolvedExpression then_ex = resolve_expression_expected_type(expr->ternary.then_ex, expected_type);
     ResolvedExpression else_ex = resolve_expression_expected_type(expr->ternary.else_ex, expected_type);
 
     if (then_ex.type != else_ex.type) {
-        fatal("Then and else expression of ternary operator ? must have matching types");
+        fatal_syntax("Then and else expression of ternary operator ? must have matching types");
     }
 
     if (cond.is_const && then_ex.is_const && else_ex.is_const) {
@@ -563,12 +563,12 @@ ResolvedExpression resolve_expression_ternary(Expression *expr, Type *expected_t
 ResolvedExpression resolve_expression_index(Expression *expr) {
     ResolvedExpression operand = pointer_decay(resolve_expression(expr->index.operand));
     if (operand.type->kind != TYPE_POINTER) {
-        fatal("Can only index arrays or pointers");
+        fatal_syntax("Can only index arrays or pointers");
     }
     ResolvedExpression index = resolve_expression(expr->index.index);
 
     if (index.type->kind != TYPE_INT) {
-        fatal("Index must have typespec int");
+        fatal_syntax("Index must have typespec int");
     }
     return resolved_lvalue(operand.type->pointer.base);
 }
@@ -578,14 +578,14 @@ ResolvedExpression resolve_expression_cast(Expression *expr) {
     ResolvedExpression result = pointer_decay(resolve_expression(expr->cast.expr));
     if (type->kind == TYPE_POINTER) {
         if (result.type->kind != TYPE_POINTER && result.type->kind != TYPE_INT) {
-            fatal("Invalid cast to pointer typespec");
+            fatal_syntax("Invalid cast to pointer typespec");
         }
     } else if (type->kind == TYPE_INT) {
         if (result.type->kind != TYPE_POINTER && result.type->kind != TYPE_INT) {
-            fatal("Invalid cast to int typespec");
+            fatal_syntax("Invalid cast to int typespec");
         }
     } else {
-        fatal("Invalid target cast typespec");
+        fatal_syntax("Invalid target cast typespec");
     }
 
     return resolved_rvalue(type);
@@ -661,7 +661,7 @@ ResolvedExpression resolve_expression(Expression *expr) {
 int64_t resolve_const_expression(Expression *expr) {
     ResolvedExpression result = resolve_expression(expr);
     if (!result.is_const) {
-        fatal("Expected constant expression");
+        fatal_syntax("Expected constant expression");
     }
     return result.val;
 }
@@ -669,7 +669,7 @@ int64_t resolve_const_expression(Expression *expr) {
 void resolve_conditional_expression(Expression *expr) {
     ResolvedExpression cond = resolve_expression(expr);
     if (cond.type != type_int) {
-        fatal("Conditional expression must have typespec int");
+        fatal_syntax("Conditional expression must have typespec int");
     }
 }
 
@@ -716,7 +716,7 @@ void resolve_statement(Statement *stmt, Type *ret_type) {
                 for (size_t j = 0; j < _case.num_expressions; j++) {
                     ResolvedExpression case_expr = resolve_expression(_case.expressions[j]);
                     if (case_expr.type != expr.type) {
-                        fatal("Case expression in switch typespec mismatch");
+                        fatal_syntax("Case expression in switch typespec mismatch");
                     }
                 }
                 resolve_statement_block(_case.body, ret_type);
@@ -728,15 +728,15 @@ void resolve_statement(Statement *stmt, Type *ret_type) {
             if (stmt->assign.right) {
                 ResolvedExpression right = resolve_expression_expected_type(stmt->assign.right, left.type);
                 if (left.type != right.type) {
-                    fatal("Left operand typespec of assignment doesn't match right operand");
+                    fatal_syntax("Left operand typespec of assignment doesn't match right operand");
                 }
             }
             if (!left.is_lvalue) {
-                fatal("Can't assign to non-lvalue");
+                fatal_syntax("Can't assign to non-lvalue");
             }
 
             if (stmt->assign.op != TOKEN_ASSIGN && left.type != type_int) {
-                fatal("Assigment operator works only for ints");
+                fatal_syntax("Assigment operator works only for ints");
             }
             break;
         }
@@ -747,11 +747,11 @@ void resolve_statement(Statement *stmt, Type *ret_type) {
             if (stmt->expr) {
                 ResolvedExpression ret = resolve_expression_expected_type(stmt->expr, ret_type);
                 if (ret.type != ret_type) {
-                    fatal("Return typespec mismatch");
+                    fatal_syntax("Return typespec mismatch");
                 }
             } else {
                 if (ret_type != type_void) {
-                    fatal("Empty return expression for function with non-void return typespec");
+                    fatal_syntax("Empty return expression for function with non-void return typespec");
                 }
             }
             break;
@@ -773,7 +773,7 @@ Type* resolve_typespec(Typespec *typespec) {
         case TYPESPEC_NAME: {
             Entity *entity = resolve_entity_name(typespec->name);
             if (entity->kind != ENTITY_TYPE) {
-                fatal("%s must be typespec", typespec->name);
+                fatal_error(typespec->location, "%s must be typespec", typespec->name);
             }
             type = entity->type;
             break;
@@ -819,7 +819,7 @@ Type* resolve_declaration_var(Declaration *decl) {
     if (decl->var.expr) {
         ResolvedExpression result = resolve_expression_expected_type(decl->var.expr, type);
         if (type && result.type != type) {
-            fatal("Declared var types doesn't not match inferred typespec");
+            fatal_syntax("Declared var types doesn't not match inferred typespec");
         }
 
         type = result.type;
@@ -832,7 +832,7 @@ Type* resolve_declaration_var(Declaration *decl) {
 Type* resolve_declaration_const(Declaration *decl, int64_t *val) {
     ResolvedExpression result = resolve_expression(decl->const_decl.expr);
     if (!result.is_const) {
-        fatal("Initial value for const is not a constant");
+        fatal_syntax("Initial value for const is not a constant");
     }
     *val = result.val;
     return result.type;
@@ -866,7 +866,7 @@ void resolve_entity(Entity *entity) {
     }
 
     if (entity->state == ENTITY_RESOLVING) {
-        fatal("Cyclic dependency of declaration");
+        fatal_syntax("Cyclic dependency of declaration");
     }
     entity->state = ENTITY_RESOLVING;
 
@@ -895,7 +895,7 @@ void resolve_entity(Entity *entity) {
 Entity* resolve_entity_name(const char *name) {
     Entity *entity = entity_get(name);
     if (!entity) {
-        fatal("Unknown name declaration");
+        fatal_syntax("Unknown name declaration");
     }
 
     resolve_entity(entity);

@@ -61,12 +61,6 @@ static inline bool is_keyword_str(const char *str) {
     return start_keywords <= str && str <= end_keywords;
 }
 
-Token token;
-const char *stream;
-const char *line_start;
-int src_line;
-const char *src_name;
-
 const char *token_kind_names[] = {
         [TOKEN_EOF] = "EOF",
         [TOKEN_INT] = "int",
@@ -507,13 +501,13 @@ static inline bool expect_token(TokenKind kind) {
         next_token();
         return true;
     } else {
-        fatal("expected token %s, got %s", token_kind_names[kind], token_str(token));
+        fatal_syntax("expected token %s, got %s", token_kind_names[kind], token_str(token));
         return false;
     }
 }
 
 
-void init_stream(const char* str, const char *name) {
+void init_stream(const char *name, const char* str) {
     stream = str;
     line_start = stream;
     src_line = 1;

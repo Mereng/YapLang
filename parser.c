@@ -19,7 +19,7 @@ CompoundField parse_expression_compound_field() {
         Expression *expr = parse_expression();
         if (match_token(TOKEN_ASSIGN)) {
             if (expr->kind != EXPR_NAME) {
-                fatal("Named initializer in compoound literal must be field name");
+                fatal_syntax("Named initializer in compoound literal must be field name");
             }
             return (CompoundField){COMPOUNDFIELD_NAME, parse_expression(), .name = expr->name};
         } else {
@@ -93,7 +93,7 @@ Expression* parse_expression_operand() {
         expect_token(TOKEN_RPAREN);
         return expression_cast(type, cast_expr);
     } else {
-        fatal("Unexpected token %s in expression", token_str(token));
+        fatal_syntax("Unexpected token %s in expression", token_str(token));
         return NULL;
     }
 }
@@ -235,7 +235,7 @@ Typespec *parse_type_base() {
         expect_token(TOKEN_RPAREN);
         return type;
     } else {
-        fatal("Unexpected token %s in typespec", token_str(token));
+        fatal_syntax("Unexpected token %s in typespec", token_str(token));
     }
 }
 
@@ -273,7 +273,7 @@ Statement* parse_statement_simple() {
     Statement *stmt;
     if (match_token(TOKEN_AUTO_ASSIGN)) {
         if (expr->kind != EXPR_NAME) {
-            fatal("operator := must be preceded by a name");
+            fatal_syntax("operator := must be preceded by a name");
         }
         stmt = statement_auto_assign(expr->name, parse_expression());
     } else if (TOKEN_START_ASSIGN <= token.kind && token.kind <= TOKEN_END_ASSIGN) {
@@ -339,7 +339,7 @@ Statement* parse_statement_while() {
 Statement* parse_statement_do_while() {
     StatementBlock block = parse_statement_block();
     if (!match_keyword(keywords.while_keyword)) {
-        fatal("Expected 'while' after 'do' block");
+        fatal_syntax("Expected 'while' after 'do' block");
         return NULL;
     }
     Statement *stmt = statement_do_while(parse_expression_paren(), block);
@@ -480,7 +480,7 @@ Declaration* parse_declaration_var() {
         expect_token(TOKEN_SEMICOLON);
         return declaration_var(name, type, expr);
     } else {
-        fatal("Expected : or = after var, got %s", token_str(token));
+        fatal_syntax("Expected : or = after var, got %s", token_str(token));
         return NULL;
     }
 }
@@ -546,7 +546,7 @@ Declaration* try_parse_declaration() {
 Declaration* parse_declaration() {
     Declaration *decl = try_parse_declaration();
     if (!decl) {
-        fatal("Expected declaration keyword, got %s ", token_str(token));
+        fatal_syntax("Expected declaration keyword, got %s ", token_str(token));
     }
 
     return decl;

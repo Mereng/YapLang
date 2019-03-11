@@ -7,6 +7,8 @@
 #include "ast.h"
 #include "aalloc.h"
 
+extern int src_line;
+extern char* src_name;
 ArenaMem ast_arena;
 
 void* ast_alloc(size_t size) {
@@ -33,6 +35,7 @@ Type *type_new(TypeKind kind) {
 Typespec* typespec_new(TypespecKind kind) {
     Typespec *typespec = ast_alloc(sizeof(Typespec));
     typespec->kind = kind;
+    typespec->location = (SrcLocation){src_name, src_line};
     return typespec;
 }
 Typespec* typespec_name(const char *name) {
@@ -63,6 +66,7 @@ Declaration* declaration_new(DeclarationKind kind, const char *name) {
     Declaration *decl = ast_alloc(sizeof(Declaration));
     decl->kind = kind;
     decl->name = name;
+    decl->location = (SrcLocation){src_name, src_line};
     return decl;
 }
 Declaration* declaration_enum(const char *name, EnumItem *items, size_t num_items) {
@@ -125,6 +129,7 @@ DeclarationList *declaration_list_new(Declaration **declarations, size_t num) {
 Expression* expression_new(ExpressionKind kind) {
     Expression *expr = ast_alloc(sizeof(Declaration));
     expr->kind = kind;
+    expr->location = (SrcLocation){src_name, src_line};
     return expr;
 }
 Expression* expression_int(int64_t int_val) {
@@ -215,6 +220,7 @@ Expression* expression_sizeof_expr(Expression *sizeof_expr) {
 Statement* statement_new(StatementKind kind) {
     Statement *stmt = ast_alloc(sizeof(Statement));
     stmt->kind = kind;
+    stmt->location = (SrcLocation){src_name, src_line};
     return stmt;
 }
 Statement* statement_if(Expression *cond, StatementBlock then, ElseIf *else_ifs, size_t num_else_ifs,

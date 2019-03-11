@@ -15,23 +15,24 @@
 #include "buf.h"
 #include "aalloc.h"
 #include "ast.h"
-#include "yap.c"
+#include "general.c"
 #include "lexer.c"
 #include "parser.c"
 #include "resolver.c"
 #include "generator.c"
+#include "yap.c"
 #include "fortests.c"
 
 
-int main() {
-    keywords_init();
-    buf_test();
-    keywords_test();
-    lex_test();
-    str_intern_test();
+int main(int argc, char **argv) {
+//    keywords_init();
+//    buf_test();
+//    keywords_test();
+//    lex_test();
+//    str_intern_test();
 //    ast_test();
 //    parser_test();
 //    resolver_test();
-    gen_test();
-    return 0;
+//    gen_test();
+    return yap_main(argc, argv);
 }
