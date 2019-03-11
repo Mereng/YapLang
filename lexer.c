@@ -64,7 +64,8 @@ static inline bool is_keyword_str(const char *str) {
 Token token;
 const char *stream;
 const char *line_start;
-size_t line_number;
+int src_line;
+const char *src_name;
 
 const char *token_kind_names[] = {
         [TOKEN_EOF] = "EOF",
@@ -342,7 +343,7 @@ void next_token() {
             while (isspace(*stream)) {
                 if (*stream++ == '\n') {
                     line_start = stream;
-                    line_number++;
+                    src_line++;
                 }
             }
             goto top;
@@ -512,10 +513,11 @@ static inline bool expect_token(TokenKind kind) {
 }
 
 
-void init_stream(const char* str) {
+void init_stream(const char* str, const char *name) {
     stream = str;
     line_start = stream;
-    line_number = 1;
+    src_line = 1;
+    src_name = name ? name : "<anonymous>";
     next_token();
 }
 
@@ -529,7 +531,7 @@ void keywords_test() {
 }
 
 void lex_test() {
-    init_stream("0 0x100000000000000 01777777777777777777777 0b1111111111111111111111111111111111111111111111111111111111111111");
+    init_stream("0 0x100000000000000 01777777777777777777777 0b1111111111111111111111111111111111111111111111111111111111111111", NULL);
     assert(token.int_val == 0);
     next_token();
     assert(token.int_val == 0x100000000000000ul);
@@ -537,7 +539,7 @@ void lex_test() {
     assert(token.int_val == 01777777777777777777777ul);
     next_token();
     assert(token.int_val == 0b1111111111111111111111111111111111111111111111111111111111111111ul);
-    init_stream("3.14 3e-3 .2 42.");
+    init_stream("3.14 3e-3 .2 42.", NULL);
     assert(token.float_val == 3.14);
     next_token();
     assert(token.float_val == 3e-3);
@@ -545,14 +547,14 @@ void lex_test() {
     assert(token.float_val == .2);
     next_token();
     assert(token.float_val == 42.);
-    init_stream("'a' '\\n'");
+    init_stream("'a' '\\n'", NULL);
     assert(token.int_val == 'a');
     next_token();
     assert(token.int_val == '\n');
-    init_stream("\"b\\n\\t\"");
+    init_stream("\"b\\n\\t\"", NULL);
     assert(strcmp(token.str_val, "b\n\t") == 0);
 
-    init_stream(":= + += - -= <= <<= >>= >=");
+    init_stream(":= + += - -= <= <<= >>= >=", NULL);
     assert(token.kind == TOKEN_AUTO_ASSIGN);
     next_token();
     assert(token.kind == TOKEN_ADD);

@@ -1,7 +1,3 @@
-
-#include <ast.h>
-#include <aalloc.h>
-
 void fatal(const char* fmt, ...) {
     va_list args;
     va_start(args, fmt);

@@ -453,7 +453,7 @@ void parser_test() {
     };
 
     for (const char **it = code; it != code + sizeof(code) / sizeof(*code); it++) {
-        init_stream(*it);
+        init_stream(*it, NULL);
         Declaration *d = parse_declaration();
         print_declaration(d);
         printf("\n");
@@ -503,7 +503,7 @@ void resolver_test() {
     };
 
     for (size_t i = 0; i < sizeof(code) / sizeof(*code); i++) {
-        init_stream(code[i]);
+        init_stream(code[i], NULL);
         entity_append_declaration(parse_declaration());
     }
 
@@ -532,7 +532,7 @@ void gen_test() {
             "const n = 100\n"
     ;
 
-    init_stream(code);
+    init_stream(code, NULL);
     init_entities();
     entities_append_declaration_list(parse_file());
     complete_entities();
