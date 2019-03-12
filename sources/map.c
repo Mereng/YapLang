@@ -15,14 +15,13 @@ uint64_t pointer_hash(void *ptr) {
 }
 
 uint64_t string_hash(const char *str, size_t len) {
-    uint64_t fnv_int = 14695981039346656037ull;
-    uint64_t fnv_mul = 1099511628211ull;
-    uint64_t h = fnv_int;
+    uint64_t x = 14695981039346656037ull;
     for (size_t i = 0; i < len; i++) {
-        h ^= str[i];
-        h *= fnv_mul;
+        x ^= str[i];
+        x *= 1099511628211ull;
+        x ^= x >> 32;
     }
-    return h;
+    return x;
 }
 
 void map_grow(Map *map, size_t new_cap) {
@@ -46,8 +45,9 @@ void** map_put_hashed(Map *map, void *key, void *val, uint64_t hash) {
     if (2 * map->len >= map->cap) {
         map_grow(map, 2 * map->cap);
     }
-    uint32_t i = (uint32_t)(hash & (map->cap - 1));
+    uint32_t i = (uint32_t)(hash);
     for (;;) {
+        i &= map->cap - 1;
         MapItem *item = map->items + i;
         if (!item->key) {
             map->len++;
@@ -61,9 +61,6 @@ void** map_put_hashed(Map *map, void *key, void *val, uint64_t hash) {
         }
 
         i++;
-        if (i == map->cap) {
-            i = 0;
-        }
     }
 }
 
@@ -75,8 +72,9 @@ void* map_get_hashed(Map *map, void *key, uint64_t hash) {
     if (map->len <= 0) {
         return NULL;
     }
-    uint32_t i = (uint32_t)(hash & (map->cap - 1));
+    uint32_t i = (uint32_t)(hash);
     for (;;) {
+        i &= map->cap - 1;
         MapItem *item = map->items + i;
         if (item->key == key) {
             return item->val;
@@ -84,9 +82,6 @@ void* map_get_hashed(Map *map, void *key, uint64_t hash) {
             return NULL;
         }
         i++;
-        if (i == map->cap) {
-            i = 0;
-        }
     }
 }
 

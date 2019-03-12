@@ -37,6 +37,9 @@ Map interns;
 const char* str_intern_range(const char *start, const char *end) {
     size_t len = end - start;
     uint64_t hash = string_hash(start, len);
+    if (hash == 0) {
+        hash = 1;
+    }
     InternStr *intern = map_get_hashed(&interns, (void*)hash, hash);
     for (InternStr *it = intern; it; it = it->next) {
         if (it->len == len && strncmp(it->str, start, len) == 0) {
