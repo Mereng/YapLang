@@ -34,28 +34,20 @@ ResolvedExpression resolved_const(int64_t val) {
     };
 }
 
-typedef struct PointerTypeCached {
-    Type *base;
-    Type *pointer;
-} PointerTypeCached;
-
-PointerTypeCached *pointer_types_cache;
+Map pointer_types_cache;
 
 const size_t POINTER_SIZE = 8;
 const size_t POINTER_ALIGN = 8;
 
 Type *type_pointer(Type *base) {
-    for (PointerTypeCached *it = pointer_types_cache; it != buf_end(pointer_types_cache); it++) {
-        if (it->base == base) {
-            return it->pointer;
-        }
+    Type *type = map_get(&pointer_types_cache, base);
+    if (!type) {
+        type = type_new(TYPE_POINTER);
+        type->size = POINTER_SIZE;
+        type->align = POINTER_ALIGN;
+        type->pointer.base = base;
+        map_put(&pointer_types_cache, base, type);
     }
-
-    Type *type = type_new(TYPE_POINTER);
-    type->size = POINTER_SIZE;
-    type->align = POINTER_ALIGN;
-    type->pointer.base = base;
-    buf_push(pointer_types_cache, ((PointerTypeCached){base, type}));
     return type;
 }
 
@@ -129,7 +121,7 @@ Type* type_incomplete(Entity *entity) {
 
 #define MAX_LOCAL_ENTITIES 1024
 
-Entity **global_entities;
+Map global_entities;
 Entity local_entities[MAX_LOCAL_ENTITIES];
 Entity *local_entities_end = local_entities;
 Entity **entities_ordered;
@@ -256,12 +248,7 @@ Entity* entity_get(const char *name) {
             return entity;
         }
     }
-    for (Entity **it = global_entities; it != buf_end(global_entities); it++) {
-        if ((*it)->name == name) {
-            return *it;
-        }
-    }
-    return NULL;
+    return map_get(&global_entities, (void*)name);
 }
 
 void local_entities_push_var(const char *name, Type *type) {
@@ -286,11 +273,12 @@ void local_scope_leave(Entity *ptr_end) {
 
 Entity* entity_append_declaration(Declaration *declaration) {
     Entity *entity = entity_declaration(declaration);
+    map_put(&global_entities, (void*)entity->name, entity);
     declaration->entity = entity;
-    buf_push(global_entities, entity);
     if (declaration->kind == DECL_ENUM) {
-        for (EnumItem *it = declaration->enum_delc.items; it != declaration->enum_delc.items + declaration->enum_delc.num_items; it++) {
-            buf_push(global_entities, entity_enum_const(it->name, declaration));
+        for (size_t i = 0; i < declaration->enum_delc.num_items; i++) {
+            Entity *entity_const = entity_enum_const(declaration->enum_delc.items[i].name, declaration);
+            map_put(&global_entities, (void*)entity_const->name, entity_const);
         }
     }
     return entity;
@@ -300,7 +288,7 @@ Entity* entity_append_type(const char *name, Type *type) {
     Entity *entity = entity_new(ENTITY_TYPE, name, NULL);
     entity->state = ENTITY_RESOLVED;
     entity->type = type;
-    buf_push(global_entities, entity);
+    map_put(&global_entities, (void*)entity->name, entity);
     return entity;
 }
 
@@ -912,8 +900,13 @@ void complete_entity(Entity *entity) {
 }
 
 void complete_entities() {
-    for (Entity **it = global_entities; it != buf_end(global_entities); it++) {
-        complete_entity(*it);
+    for (size_t i = 0; i < global_entities.cap; i++) {
+        MapItem *item = global_entities.items + i;
+        if (!item->key) {
+            continue;
+        }
+        Entity *entity = item->val;
+        complete_entity(entity);
     }
 }
 

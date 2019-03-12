@@ -27,27 +27,30 @@ void fatal(const char *fmt, ...) {
 
 typedef struct InternStr {
     size_t len;
-    const char *str;
+    struct InternStr *next;
+    char str[];
 } InternStr;
 
 ArenaMem strs_arena;
-InternStr *interns;
+Map interns;
 
 const char* str_intern_range(const char *start, const char *end) {
     size_t len = end - start;
-
-    for (int i = 0; i < buf_len(interns); i++) {
-        if (interns[i].len == len && strncmp(interns[i].str, start, len) == 0) {
-            return interns[i].str;
+    uint64_t hash = string_hash(start, len);
+    InternStr *intern = map_get_hashed(&interns, (void*)hash, hash);
+    for (InternStr *it = intern; it; it = it->next) {
+        if (it->len == len && strncmp(it->str, start, len) == 0) {
+            return it->str;
         }
     }
 
-    char *str = arena_alloc(&strs_arena, len + 1);
-    memcpy(str, start, len);
-    str[len] = 0;
-    buf_push(interns, ((InternStr){len, str}));
-
-    return str;
+    InternStr *new = arena_alloc(&strs_arena, offsetof(InternStr, str) + len + 1);
+    new->len = len;
+    new->next = intern;
+    memcpy(new->str, start, len);
+    new->str[len] = 0;
+    map_put_hashed(&interns, (void*)hash, new, hash);
+    return new->str;
 }
 
 const char* str_intern(const char *str) {

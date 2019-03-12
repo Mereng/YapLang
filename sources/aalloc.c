@@ -7,7 +7,7 @@
 #include "buf.h"
 
 #define ARENA_ALIGNMENT 8
-#define ARENA_BLOCK_SIZE 1024
+#define ARENA_BLOCK_SIZE 1024 * 1024
 
 void arena_grow(ArenaMem *arena, size_t size_min) {
     size_t size = ALIGN_UP(MAX(ARENA_BLOCK_SIZE, size_min), ARENA_ALIGNMENT);

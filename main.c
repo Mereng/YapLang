@@ -15,6 +15,7 @@
 #include "buf.h"
 #include "aalloc.h"
 #include "ast.h"
+#include "map.h"
 #include "general.c"
 #include "lexer.c"
 #include "parser.c"

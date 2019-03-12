@@ -78,8 +78,8 @@ char* typespec_to_cdecl(Typespec *typespec, const char *str) {
             gen_buf = tmp_buf;
             return r;
         }
-        case TYPE_POINTER:
-            return typespec_to_cdecl(typespec->pointer.base, cdecl_paren(stringf("*s", str), *str));
+        case TYPESPEC_POINTER:
+            return typespec_to_cdecl(typespec->pointer.base, cdecl_paren(stringf("*%s", str), *str));
         case TYPESPEC_FUNC: {
             char *buf = NULL;
             buf_printf(buf, "%s(", cdecl_paren(stringf("*%s", str), *str));
@@ -355,8 +355,12 @@ void generate_func_declaration(Declaration *decl) {
 }
 
 void generate_forward_declarations() {
-    for (Entity **it = global_entities; it != buf_end(global_entities); it++) {
-        Entity *entity = *it;
+    for (size_t i = 0; i < global_entities.cap; i++) {
+        MapItem *item = global_entities.items + i;
+        if (!item->key) {
+            continue;
+        }
+        Entity *entity = item->val;
         Declaration *decl = entity->decl;
         if (!decl) {
             continue;
@@ -442,6 +446,7 @@ void generate_ordered_entities() {
 }
 
 void generate_c_code() {
+    gen_buf = NULL;
     generate_forward_declarations();
     genln();
     generate_ordered_entities();
