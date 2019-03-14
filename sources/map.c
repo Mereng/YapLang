@@ -27,64 +27,53 @@ uint64_t string_hash(const char *str, size_t len) {
 void map_grow(Map *map, size_t new_cap) {
     new_cap = MAX(16, new_cap);
     Map new_map = {
-        .items = calloc(new_cap, sizeof(MapItem)),
+        .keys = calloc(new_cap, sizeof(void*)),
+        .vals = malloc(new_cap * sizeof(void*)),
         .cap = new_cap
     };
     for (size_t i = 0; i < map->cap; i++) {
-        MapItem *item = map->items + i;
-        if (item->key) {
-            map_put_hashed(&new_map, item->key, item->val, item->hash);
+        if (map->keys[i]) {
+            map_put(&new_map, map->keys[i], map->vals[i]);
         }
     }
-    free(map->items);
+    free(map->keys);
+    free(map->vals);
     *map = new_map;
 }
 
-void** map_put_hashed(Map *map, void *key, void *val, uint64_t hash) {
+void map_put(Map *map, void *key, void *val) {
     assert(key && val);
     if (2 * map->len >= map->cap) {
         map_grow(map, 2 * map->cap);
     }
-    uint32_t i = (uint32_t)(hash);
+    size_t i = (size_t)pointer_hash(key);
     for (;;) {
         i &= map->cap - 1;
-        MapItem *item = map->items + i;
-        if (!item->key) {
+        if (!map->keys[i]) {
             map->len++;
-            item->key = key;
-            item->val = val;
-            item->hash = hash;
-            return &item->val;
-        } else if (item->key == key) {
-            item->val = val;
-            return &item->val;
-        }
-
-        i++;
-    }
-}
-
-void** map_put(Map *map, void *key, void *val) {
-    return map_put_hashed(map, key, val, pointer_hash(key));
-}
-
-void* map_get_hashed(Map *map, void *key, uint64_t hash) {
-    if (map->len <= 0) {
-        return NULL;
-    }
-    uint32_t i = (uint32_t)(hash);
-    for (;;) {
-        i &= map->cap - 1;
-        MapItem *item = map->items + i;
-        if (item->key == key) {
-            return item->val;
-        } else if (!item->key) {
-            return NULL;
+            map->keys[i] = key;
+            map->vals[i] = val;
+            return;
+        } else if (map->keys[i] == key) {
+            map->vals[i] = val;
+            return;
         }
         i++;
     }
 }
 
 void* map_get(Map *map, void *key) {
-    return map_get_hashed(map, key, pointer_hash(key));
+    if (map->len <= 0) {
+        return NULL;
+    }
+    size_t i = (size_t)pointer_hash(key);
+    for (;;) {
+        i &= map->cap - 1;
+        if (map->keys[i] == key) {
+            return map->vals[i];
+        } else if (!map->keys[i]) {
+            return NULL;
+        }
+        i++;
+    }
 }

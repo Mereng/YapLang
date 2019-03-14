@@ -40,12 +40,9 @@ bool write_file(const char *path, const char *buf, size_t size) {
     if (!file) {
         return false;
     }
-    if (fwrite(buf, size, 1, file) != 1) {
-        fclose(file);
-        return false;
-    }
+    size_t n = fwrite(buf, size, 1, file);
     fclose(file);
-    return true;
+    return n == 1;
 }
 
 const char* get_ext(const char *path) {

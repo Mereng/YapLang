@@ -766,9 +766,14 @@ Type* resolve_typespec(Typespec *typespec) {
             type = entity->type;
             break;
         }
-        case TYPESPEC_ARRAY:
-            type = type_array(resolve_typespec(typespec->array.base), (size_t)resolve_const_expression(typespec->array.size));
+        case TYPESPEC_ARRAY: {
+            int64_t size = resolve_const_expression(typespec->array.size);
+            if (size < 0) {
+                fatal("Negative array size");
+            }
+            type = type_array(resolve_typespec(typespec->array.base), (size_t)size);
             break;
+        }
         case TYPESPEC_POINTER:
             type = type_pointer(resolve_typespec(typespec->pointer.base));
             break;
@@ -901,11 +906,10 @@ void complete_entity(Entity *entity) {
 
 void complete_entities() {
     for (size_t i = 0; i < global_entities.cap; i++) {
-        MapItem *item = global_entities.items + i;
-        if (!item->key) {
+        if (!global_entities.keys[i]) {
             continue;
         }
-        Entity *entity = item->val;
+        Entity *entity = global_entities.vals[i];
         complete_entity(entity);
     }
 }

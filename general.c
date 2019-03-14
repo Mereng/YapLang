@@ -40,7 +40,7 @@ const char* str_intern_range(const char *start, const char *end) {
     if (hash == 0) {
         hash = 1;
     }
-    InternStr *intern = map_get_hashed(&interns, (void*)hash, hash);
+    InternStr *intern = map_get(&interns, (void*)hash);
     for (InternStr *it = intern; it; it = it->next) {
         if (it->len == len && strncmp(it->str, start, len) == 0) {
             return it->str;
@@ -52,7 +52,7 @@ const char* str_intern_range(const char *start, const char *end) {
     new->next = intern;
     memcpy(new->str, start, len);
     new->str[len] = 0;
-    map_put_hashed(&interns, (void*)hash, new, hash);
+    map_put(&interns, (void*)hash, new);
     return new->str;
 }
 

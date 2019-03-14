@@ -356,11 +356,10 @@ void generate_func_declaration(Declaration *decl) {
 
 void generate_forward_declarations() {
     for (size_t i = 0; i < global_entities.cap; i++) {
-        MapItem *item = global_entities.items + i;
-        if (!item->key) {
+        if (!global_entities.keys[i]) {
             continue;
         }
-        Entity *entity = item->val;
+        Entity *entity = global_entities.vals[i];
         Declaration *decl = entity->decl;
         if (!decl) {
             continue;
