@@ -4,20 +4,20 @@
 #include "map.h"
 #include "tools.h"
 
-uint64_t uint64_hash(uint64_t x) {
+uint64_t hash_uint64(uint64_t x) {
     x *= 0xff51afd7ed558ccdul;
     x ^= x >> 32;
     return x;
 }
 
-uint64_t pointer_hash(void *ptr) {
-    return  uint64_hash((uintptr_t)ptr);
+uint64_t hash_pointer(void *ptr) {
+    return hash_uint64((uintptr_t) ptr);
 }
 
-uint64_t string_hash(const char *str, size_t len) {
+uint64_t hash_bytes(const char *buf, size_t len) {
     uint64_t x = 14695981039346656037ull;
     for (size_t i = 0; i < len; i++) {
-        x ^= str[i];
+        x ^= buf[i];
         x *= 1099511628211ull;
         x ^= x >> 32;
     }
@@ -46,7 +46,7 @@ void map_put(Map *map, void *key, void *val) {
     if (2 * map->len >= map->cap) {
         map_grow(map, 2 * map->cap);
     }
-    size_t i = (size_t)pointer_hash(key);
+    size_t i = (size_t) hash_pointer(key);
     for (;;) {
         i &= map->cap - 1;
         if (!map->keys[i]) {
@@ -66,7 +66,7 @@ void* map_get(Map *map, void *key) {
     if (map->len <= 0) {
         return NULL;
     }
-    size_t i = (size_t)pointer_hash(key);
+    size_t i = (size_t) hash_pointer(key);
     for (;;) {
         i &= map->cap - 1;
         if (map->keys[i] == key) {

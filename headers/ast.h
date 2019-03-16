@@ -3,8 +3,10 @@
 
 #include <stddef.h>
 #include <stdint.h>
-#include <token.h>
 #include <stdbool.h>
+
+#include "token.h"
+#include "tools.h"
 
 typedef struct Type Type;
 typedef enum TypespecKind TypespecKind;
@@ -27,10 +29,6 @@ typedef struct StatementBlock StatementBlock;
 void* ast_alloc(size_t size);
 void* ast_dup(const void *src, size_t size);
 
-typedef struct SrcLocation {
-    const char *name;
-    int line;
-} SrcLocation;
 
 typedef enum EntityState {
     ENTITY_UNRESOLVED,
@@ -135,11 +133,11 @@ struct Typespec {
     };
 };
 
-Typespec* typespec_new(TypespecKind kind);
-Typespec* typespec_name(const char *name);
-Typespec* typespec_pointer(Typespec *base);
-Typespec* typespec_array(Typespec *base, Expression *size);
-Typespec* typespec_func(Typespec **args, size_t num_args, Typespec *ret);
+Typespec* typespec_new(TypespecKind kind, SrcLocation loc);
+Typespec* typespec_name(const char *name, SrcLocation loc);
+Typespec* typespec_pointer(Typespec *base, SrcLocation loc);
+Typespec* typespec_array(Typespec *base, Expression *size, SrcLocation loc);
+Typespec* typespec_func(Typespec **args, size_t num_args, Typespec *ret, SrcLocation loc);
 
 
 struct StatementBlock {
@@ -161,22 +159,24 @@ enum DeclarationKind {
 struct EnumItem {
     const char *name;
     Expression *init;
+    SrcLocation location;
 };
 
 struct AggregateItem {
     const char **names;
     size_t num_names;
     Typespec *type;
+    SrcLocation location;
 };
 
 struct FuncParam {
     const char *name;
     Typespec *type;
+    SrcLocation location;
 };
 
 
 struct Declaration {
-    SrcLocation location;
     DeclarationKind kind;
     Entity *entity;
     const char *name;
@@ -206,17 +206,20 @@ struct Declaration {
             Typespec *type;
         } typedef_decl;
     };
+    SrcLocation location;
 };
 
-Declaration* declaration_new(DeclarationKind kind, const char *name);
-Declaration* declaration_enum(const char *name, EnumItem *items, size_t num_items);
-Declaration* declaration_struct(const char *name, AggregateItem *items, size_t num_items);
-Declaration* declaration_union(const char *name, AggregateItem *items, size_t num_items);
-Declaration* declaration_aggregate(DeclarationKind kind, const char *name, AggregateItem *items, size_t num_items);
-Declaration* declaration_var(const char *name, Typespec *type, Expression *expr);
-Declaration* declaration_const(const char *name, Expression *expr);
-Declaration* declaration_func(const char *name, FuncParam *params, size_t num_params, Typespec *ret_type, StatementBlock body);
-Declaration* declaration_typedef(const char *name, Typespec *type);
+Declaration* declaration_new(DeclarationKind kind, const char *name, SrcLocation loc);
+Declaration* declaration_enum(const char *name, EnumItem *items, size_t num_items, SrcLocation loc);
+Declaration* declaration_struct(const char *name, AggregateItem *items, size_t num_items, SrcLocation loc);
+Declaration* declaration_union(const char *name, AggregateItem *items, size_t num_items, SrcLocation loc);
+Declaration* declaration_aggregate(DeclarationKind kind, const char *name, AggregateItem *items, size_t num_items,
+        SrcLocation loc);
+Declaration* declaration_var(const char *name, Typespec *type, Expression *expr, SrcLocation loc);
+Declaration* declaration_const(const char *name, Expression *expr, SrcLocation loc);
+Declaration* declaration_func(const char *name, FuncParam *params, size_t num_params, Typespec *ret_type,
+        StatementBlock body, SrcLocation loc);
+Declaration* declaration_typedef(const char *name, Typespec *type, SrcLocation loc);
 
 struct DeclarationList {
     Declaration **declarations;
@@ -256,10 +259,10 @@ typedef struct CompoundField {
         const char *name;
         Expression *index;
     };
+    SrcLocation location;
 } CompoundField;
 
 struct Expression {
-    SrcLocation location;
     ExpressionKind kind;
     Type *type;
     union {
@@ -306,23 +309,24 @@ struct Expression {
         Typespec *size_of_type;
         Expression *size_of_expr;
     };
+    SrcLocation location;
 };
 
-Expression* expression_new(ExpressionKind kind);
-Expression* expression_int(int64_t int_val);
-Expression* expression_float(double float_val);
-Expression* expression_str(const char *str_val);
-Expression* expression_name(const char *name);
-Expression* expression_cast(Typespec *cast_type, Expression *cast_expr);
-Expression* expression_unary(TokenKind operator, Expression *operand);
-Expression* expression_binary(TokenKind operator, Expression *left, Expression *right);
-Expression* expression_ternary(Expression *cond, Expression *then_expr, Expression *else_expr);
-Expression* expression_call(Expression *operand, Expression **args, size_t num_args);
-Expression* expression_index(Expression *operand, Expression *index);
-Expression* expression_field(Expression *operand, const char *field);
-Expression* expression_compound(Typespec *type, CompoundField *fields, size_t num_fields);
-Expression* expression_sizeof_type(Typespec *type);
-Expression* expression_sizeof_expr(Expression *sizeof_expr);
+Expression* expression_new(ExpressionKind kind, SrcLocation loc);
+Expression* expression_int(int64_t int_val, SrcLocation loc);
+Expression* expression_float(double float_val, SrcLocation loc);
+Expression* expression_str(const char *str_val, SrcLocation loc);
+Expression* expression_name(const char *name, SrcLocation loc);
+Expression* expression_cast(Typespec *cast_type, Expression *cast_expr, SrcLocation loc);
+Expression* expression_unary(TokenKind operator, Expression *operand, SrcLocation loc);
+Expression* expression_binary(TokenKind operator, Expression *left, Expression *right, SrcLocation loc);
+Expression* expression_ternary(Expression *cond, Expression *then_expr, Expression *else_expr, SrcLocation loc);
+Expression* expression_call(Expression *operand, Expression **args, size_t num_args, SrcLocation loc);
+Expression* expression_index(Expression *operand, Expression *index, SrcLocation loc);
+Expression* expression_field(Expression *operand, const char *field, SrcLocation loc);
+Expression* expression_compound(Typespec *type, CompoundField *fields, size_t num_fields, SrcLocation loc);
+Expression* expression_sizeof_type(Typespec *type, SrcLocation loc);
+Expression* expression_sizeof_expr(Expression *sizeof_expr, SrcLocation loc);
 
 enum StatementKind {
     STMT_NONE,
@@ -354,7 +358,6 @@ struct SwitchCase {
 };
 
 struct Statement {
-    SrcLocation location;
     StatementKind kind;
     union {
         struct {
@@ -392,21 +395,22 @@ struct Statement {
         Expression *expr;
         Declaration *decl;
     };
+    SrcLocation location;
 };
 
-Statement* statement_new(StatementKind kind);
+Statement* statement_new(StatementKind kind, SrcLocation loc);
 Statement* statement_if(Expression *cond, StatementBlock then, ElseIf *else_ifs, size_t num_else_ifs,
-        StatementBlock else_body);
-Statement* statement_for(Statement *init, Expression *cond, Statement *next, StatementBlock body);
-Statement* statement_while(Expression *cond, StatementBlock body);
-Statement* statement_do_while(Expression *cond, StatementBlock body);
-Statement* statement_switch(Expression *expr, SwitchCase *cases, size_t num_cases);
-Statement* statement_assign(TokenKind op, Expression *left, Expression *right);
-Statement* statement_auto_assign(const char *name, Expression *init);
-Statement* statement_return(Expression *expr);
-Statement* statement_break();
-Statement* statement_continue();
-Statement* statement_block(StatementBlock block);
-Statement* statement_expr(Expression *expr);
-Statement* statement_decl(Declaration *decl);
+        StatementBlock else_body, SrcLocation loc);
+Statement* statement_for(Statement *init, Expression *cond, Statement *next, StatementBlock body, SrcLocation loc);
+Statement* statement_while(Expression *cond, StatementBlock body, SrcLocation loc);
+Statement* statement_do_while(Expression *cond, StatementBlock body, SrcLocation loc);
+Statement* statement_switch(Expression *expr, SwitchCase *cases, size_t num_cases, SrcLocation loc);
+Statement* statement_assign(TokenKind op, Expression *left, Expression *right, SrcLocation loc);
+Statement* statement_auto_assign(const char *name, Expression *init, SrcLocation loc);
+Statement* statement_return(Expression *expr, SrcLocation loc);
+Statement* statement_break(SrcLocation loc);
+Statement* statement_continue(SrcLocation loc);
+Statement* statement_block(StatementBlock block, SrcLocation loc);
+Statement* statement_expr(Expression *expr, SrcLocation loc);
+Statement* statement_decl(Declaration *decl, SrcLocation loc);
 #endif

@@ -1,6 +1,8 @@
 #ifndef YAP_TOKEN_H
 #define YAP_TOKEN_H
 
+#include "tools.h"
+
 typedef enum TokenKind {
     TOKEN_EOF,
     TOKEN_INT,
@@ -76,6 +78,7 @@ typedef struct Token {
         const char *name;
         const char *str_val;
     };
+    SrcLocation location;
 } Token;
 
 #endif

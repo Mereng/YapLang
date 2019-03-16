@@ -122,9 +122,15 @@ Type* type_incomplete(Entity *entity) {
 #define MAX_LOCAL_ENTITIES 1024
 
 Map global_entities;
+Entity **global_entities_buf;
 Entity local_entities[MAX_LOCAL_ENTITIES];
 Entity *local_entities_end = local_entities;
 Entity **entities_ordered;
+
+void global_entities_put(Entity *entity) {
+    map_put(&global_entities, (void*)entity->name, entity);
+    buf_push(global_entities_buf, entity);
+}
 
 Type* resolve_typespec(Typespec *typespec);
 
@@ -273,25 +279,32 @@ void local_scope_leave(Entity *ptr_end) {
 
 Entity* entity_append_declaration(Declaration *declaration) {
     Entity *entity = entity_declaration(declaration);
-    map_put(&global_entities, (void*)entity->name, entity);
+    global_entities_put(entity);
+
     declaration->entity = entity;
     if (declaration->kind == DECL_ENUM) {
         for (size_t i = 0; i < declaration->enum_delc.num_items; i++) {
             Entity *entity_const = entity_enum_const(declaration->enum_delc.items[i].name, declaration);
-            map_put(&global_entities, (void*)entity_const->name, entity_const);
+            global_entities_put(entity_const);
         }
     }
     return entity;
 }
 
-Entity* entity_append_type(const char *name, Type *type) {
-    Entity *entity = entity_new(ENTITY_TYPE, name, NULL);
+void entity_append_type(const char *name, Type *type) {
+    Entity *entity = entity_new(ENTITY_TYPE, str_intern(name), NULL);
     entity->state = ENTITY_RESOLVED;
     entity->type = type;
-    map_put(&global_entities, (void*)entity->name, entity);
-    return entity;
+    global_entities_put(entity);
 }
 
+
+void entity_append_func(const char *name, Type *type) {
+    Entity *entity = entity_new(ENTITY_FUNC, str_intern(name), NULL);
+    entity->state = ENTITY_RESOLVED;
+    entity->type = type;
+    global_entities_put(entity);
+}
 
 int64_t eval_unary_int(TokenKind op, int64_t val) {
     switch (op) {
@@ -746,6 +759,9 @@ void resolve_statement(Statement *stmt, Type *ret_type) {
         case STMT_BREAK:
         case STMT_CONTINUE:
             break;
+        case STMT_EXPR:
+            resolve_expression(stmt->expr);
+            break;
         default:
             assert(0);
             break;
@@ -905,12 +921,11 @@ void complete_entity(Entity *entity) {
 }
 
 void complete_entities() {
-    for (size_t i = 0; i < global_entities.cap; i++) {
-        if (!global_entities.keys[i]) {
-            continue;
+    for (Entity **it = global_entities_buf; it != buf_end(global_entities_buf); it++) {
+        Entity *entity = *it;
+        if (entity->decl) {
+            complete_entity(entity);
         }
-        Entity *entity = global_entities.vals[i];
-        complete_entity(entity);
     }
 }
 
@@ -919,6 +934,7 @@ void init_entities() {
     entity_append_type(str_intern("char"), type_char);
     entity_append_type(str_intern("int"), type_int);
     entity_append_type(str_intern("float"), type_float);
+    entity_append_func(str_intern("puts"), type_func((Type*[]){type_pointer(type_char)}, 1, type_int));
 }
 
 void entities_append_declaration_list(DeclarationList *decl_list) {

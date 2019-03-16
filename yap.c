@@ -42,4 +42,5 @@ int yap_main(int argc, char **argv) {
         return 2;
     }
     printf("Succeeded\n");
+    return 0;
 }

@@ -361,7 +361,7 @@ void print_declaration(Declaration *d) {
 }
 
 
-
+#if 0
 void expr_test() {
     Expression *exprs[] = {
             expression_unary(TOKEN_SUB, expression_float(3.14)),
@@ -428,10 +428,10 @@ void statement_test() {
         printf("\n");
     }
 }
-
+#endif
 void ast_test() {
-    expr_test();
-    statement_test();
+//    expr_test();
+//    statement_test();
 }
 
 void parser_test() {

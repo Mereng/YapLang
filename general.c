@@ -1,11 +1,9 @@
 Token token;
 const char *stream;
 const char *line_start;
-int src_line;
-const char *src_name;
 
 #define fatal_syntax(...) syntax_error(__VA_ARGS__); exit(-1);
-#define syntax_error(...) error((SrcLocation){src_name, src_line}, __VA_ARGS__);
+#define syntax_error(...) error(token.location, __VA_ARGS__);
 #define fatal_error(...) error(__VA_ARGS__); exit(-2);
 
 void error(SrcLocation location, const char* fmt, ...) {
@@ -36,7 +34,7 @@ Map interns;
 
 const char* str_intern_range(const char *start, const char *end) {
     size_t len = end - start;
-    uint64_t hash = string_hash(start, len);
+    uint64_t hash = hash_bytes(start, len);
     if (hash == 0) {
         hash = 1;
     }

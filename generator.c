@@ -1,11 +1,13 @@
-#include <ast.h>
-
 char *gen_buf = NULL;
 int gen_indent = 0;
+SrcLocation gen_location;
+
+const char *gen_init = "#include <stdio.h>\n";
 
 #define genf(...) buf_printf(gen_buf, __VA_ARGS__)
 void genln() {
     genf("\n%.*s", gen_indent * 4, "                                                                 ");
+    gen_location.line++;
 }
 #define genlnf(...) (genln(), genf(__VA_ARGS__))
 
@@ -46,7 +48,7 @@ char* type_to_cdecl(Type *type, const char *str) {
         case TYPE_ARRAY:
             return type_to_cdecl(type->array.base, cdecl_paren(stringf("%s[%"PRIu64"]", str, type->array.size), *str));
         case TYPE_POINTER:
-            return type_to_cdecl(type->pointer.base, cdecl_paren(stringf("*s", str), *str));
+            return type_to_cdecl(type->pointer.base, cdecl_paren(stringf("*%s", str), *str));
         case TYPE_FUNC: {
             char *buf = NULL;
             buf_printf(buf, "%s(", cdecl_paren(stringf("*%s", str), *str));
@@ -103,6 +105,40 @@ char* typespec_to_cdecl(Typespec *typespec, const char *str) {
     }
 }
 
+
+char char_to_escape[256] = {
+    ['\n'] = 'n',
+    ['\\'] = '\\',
+    ['"'] = '"',
+    ['\''] = '\''
+};
+
+void generate_string(const char *str) {
+    genf("\"");
+    while (*str) {
+        const char *start = str;
+        while (*str && !char_to_escape[*(unsigned char*)str]) {
+            str++;
+        }
+        if (start != str) {
+            genf("%.*s", str - start, start);
+        }
+        if (*str && char_to_escape[*(unsigned char*)str]) {
+            genf("\\%c", char_to_escape[*(unsigned char*)str]);
+            str++;
+        }
+    }
+    genf("\"");
+}
+
+void generate_sync_location(SrcLocation location) {
+    if (gen_location.line != location.line || gen_location.name != location.name) {
+        genlnf("#line %d", location.line);
+        generate_string(location.name);
+        gen_location = location;
+    }
+}
+
 void generate_expression(Expression *expr) {
     switch (expr->kind) {
         case EXPR_INT:
@@ -112,7 +148,7 @@ void generate_expression(Expression *expr) {
             genf("%f", expr->float_val);
             break;
         case EXPR_STR:
-            genf("\"%s\"", expr->str_val);
+            generate_string(expr->str_val);
             break;
         case EXPR_NAME:
             genf("%s", expr->name);
@@ -238,6 +274,7 @@ void generate_simple_statement(Statement *stmt) {
 }
 
 void generate_statement(Statement *stmt) {
+    generate_sync_location(stmt->location);
     switch (stmt->kind) {
         case STMT_IF:
             genlnf("if (");
@@ -334,6 +371,7 @@ void generate_statement(Statement *stmt) {
 }
 
 void generate_func_declaration(Declaration *decl) {
+    generate_sync_location(decl->location);
     if (decl->func.return_type) {
         genlnf("%s(", typespec_to_cdecl(decl->func.return_type, decl->name));
     } else {
@@ -355,11 +393,8 @@ void generate_func_declaration(Declaration *decl) {
 }
 
 void generate_forward_declarations() {
-    for (size_t i = 0; i < global_entities.cap; i++) {
-        if (!global_entities.keys[i]) {
-            continue;
-        }
-        Entity *entity = global_entities.vals[i];
+    for (Entity **it = global_entities_buf; it != buf_end(global_entities_buf); it++) {
+        Entity *entity = *it;
         Declaration *decl = entity->decl;
         if (!decl) {
             continue;
@@ -388,6 +423,7 @@ void generate_aggregate(Declaration *decl) {
     gen_indent++;
     for (size_t i = 0; i < decl->aggregate.num_items; i++) {
         AggregateItem item = decl->aggregate.items[i];
+        generate_sync_location(item.location);
         for (size_t j = 0; j < item.num_names; j++) {
             genlnf("%s;", typespec_to_cdecl(item.type, item.names[j]));
         }
@@ -401,7 +437,7 @@ void generate_entity(Entity *entity) {
     if (!decl) {
         return;
     }
-
+    generate_sync_location(decl->location);
     switch (decl->kind) {
         case DECL_CONST:
             genlnf("enum { %s = ", entity->name);
@@ -446,6 +482,7 @@ void generate_ordered_entities() {
 
 void generate_c_code() {
     gen_buf = NULL;
+    genf("%s", gen_init);
     generate_forward_declarations();
     genln();
     generate_ordered_entities();

@@ -19,7 +19,6 @@ struct {
     const char *break_keyword;
     const char *return_keyword;
     const char *continue_keyword;
-    const char *cast_keyword;
     const char *enum_keyword;
 } keywords;
 
@@ -48,7 +47,6 @@ void keywords_init() {
     INIT_KEYWORD(break);
     INIT_KEYWORD(return);
     INIT_KEYWORD(continue);
-    INIT_KEYWORD(cast);
     INIT_KEYWORD(enum);
 
     start_keywords = keywords.func_keyword;
@@ -337,7 +335,7 @@ void next_token() {
             while (isspace(*stream)) {
                 if (*stream++ == '\n') {
                     line_start = stream;
-                    src_line++;
+                    token.location.line++;
                 }
             }
             goto top;
@@ -510,8 +508,8 @@ static inline bool expect_token(TokenKind kind) {
 void init_stream(const char *name, const char* str) {
     stream = str;
     line_start = stream;
-    src_line = 1;
-    src_name = name ? name : "<anonymous>";
+    token.location.line = 1;
+    token.location.name = name ? name : "<anonymous>";
     next_token();
 }
 
