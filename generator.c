@@ -4,7 +4,14 @@ char *gen_buf = NULL;
 int gen_indent = 0;
 SrcLocation gen_location;
 
-const char *gen_init = "#include <stdio.h>\n";
+const char *gen_init = "#include <stdio.h>\n"
+                       "typedef signed char schar;\n"
+                       "typedef unsigned char uchar;\n"
+                       "typedef unsigned short ushort;\n"
+                       "typedef unsigned int uint;\n"
+                       "typedef unsigned long ulong;\n"
+                       "typedef long long llong;\n"
+                       "typedef unsigned long long ullong;\n";
 
 #define genf(...) buf_printf(gen_buf, __VA_ARGS__)
 void genln() {
@@ -136,9 +143,38 @@ void generate_string(const char *str) {
 void generate_sync_location(SrcLocation location) {
     if (gen_location.line != location.line || gen_location.name != location.name) {
         genlnf("#line %d", location.line);
-        generate_string(location.name);
+        if (gen_location.name != location.name) {
+            genf(" ");
+            generate_string(location.name);
+        }
         gen_location = location;
     }
+}
+
+void generate_expression_compound(Expression *expr, bool is_auto_assign) {
+    if (is_auto_assign) {
+        genf("{");
+    } else if (expr->compound.type) {
+        genf("(%s){", typespec_to_cdecl(expr->compound.type, ""));
+    } else {
+        genf("(%s){", type_to_cdecl(expr->type, ""));
+    }
+
+    for (size_t i = 0; i < expr->compound.num_fields; i++) {
+        if (i != 0) {
+            genf(", ");
+        }
+        CompoundField field = expr->compound.fields[i];
+        if (field.kind == COMPOUNDFIELD_NAME) {
+            genf(".%s = ", field.name);
+        } else if (field.kind == COMPOUNDFIELD_INDEX) {
+            genf("[");
+            generate_expression(field.index);
+            genf("] = ");
+        }
+        generate_expression(field.init);
+    }
+    genf("}");
 }
 
 void generate_expression(Expression *expr) {
@@ -182,27 +218,7 @@ void generate_expression(Expression *expr) {
             genf(".%s", expr->field.name);
             break;
         case EXPR_COMPOUND:
-            if (expr->compound.type) {
-                genf("(%s){", typespec_to_cdecl(expr->compound.type, ""));
-            } else {
-                genf("(%s){", type_to_cdecl(expr->type, ""));
-            }
-
-            for (size_t i = 0; i < expr->compound.num_fields; i++) {
-                if (i != 0) {
-                    genf(", ");
-                }
-                CompoundField field = expr->compound.fields[i];
-                if (field.kind == COMPOUNDFIELD_NAME) {
-                    genf(".%s = ", field.name);
-                } else if (field.kind == COMPOUNDFIELD_INDEX) {
-                    genf("[");
-                    generate_expression(field.index);
-                    genf("] = ");
-                }
-                generate_expression(field.init);
-            }
-            genf("}");
+            generate_expression_compound(expr, false);
             break;
         case EXPR_UNARY:
             genf("%s(", token_kind_names[expr->unary.op]);
@@ -251,6 +267,14 @@ void generate_statement_block(StatementBlock block) {
     genlnf("}");
 }
 
+void generate_init_expression(Expression *expr) {
+    if (expr->kind == EXPR_COMPOUND) {
+        generate_expression_compound(expr, true);
+    } else {
+        generate_expression(expr);
+    }
+}
+
 void generate_simple_statement(Statement *stmt) {
     switch (stmt->kind) {
         case STMT_EXPR:
@@ -258,7 +282,7 @@ void generate_simple_statement(Statement *stmt) {
             break;
         case STMT_AUTO_ASSIGN:
             genf("%s = ", type_to_cdecl(stmt->auto_assign.init->type, stmt->auto_assign.name));
-            generate_expression(stmt->auto_assign.init);
+            generate_init_expression(stmt->auto_assign.init);
             break;
         case STMT_ASSIGN:
             generate_expression(stmt->assign.left);
@@ -440,7 +464,11 @@ void generate_aggregate(Declaration *decl) {
     genlnf("};");
 }
 
-void generate_entity(Entity *entity) {
+bool is_array_type_incomplete(Typespec *typespec) {
+    return typespec->kind == TYPESPEC_ARRAY && !typespec->array.size;
+}
+
+void generate_declaration(Entity *entity) {
     Declaration *decl = entity->decl;
     if (!decl) {
         return;
@@ -453,14 +481,14 @@ void generate_entity(Entity *entity) {
             genf(" };");
             break;
         case DECL_VAR:
-            if (decl->var.type) {
+            if (decl->var.type && !is_array_type_incomplete(decl->var.type)) {
                 genlnf("%s", typespec_to_cdecl(decl->var.type, entity->name));
             } else {
                 genlnf("%s", type_to_cdecl(entity->type, entity->name));
             }
             if (decl->var.expr) {
                 genf(" = ");
-                generate_expression(decl->var.expr);
+                generate_init_expression(decl->var.expr);
             }
             genf(";");
             break;
@@ -484,7 +512,7 @@ void generate_entity(Entity *entity) {
 
 void generate_ordered_entities() {
     for (Entity **it = entities_ordered; it != buf_end(entities_ordered); it++) {
-        generate_entity(*it);
+        generate_declaration(*it);
     }
 }
 

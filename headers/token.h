@@ -73,7 +73,7 @@ typedef struct Token {
     const char *start;
     const char *end;
     union {
-        int64_t int_val;
+        int int_val;
         double float_val;
         const char *name;
         const char *str_val;

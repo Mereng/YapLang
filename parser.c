@@ -32,10 +32,10 @@ CompoundField parse_expression_compound_field() {
 Expression* parse_expression_compound(Typespec *type) {
     expect_token(TOKEN_LBRACE);
     CompoundField *fields = NULL;
-    if (!is_token(TOKEN_RBRACE)) {
+    while (!is_token(TOKEN_RBRACE)) {
         buf_push(fields, parse_expression_compound_field());
-        while (match_token(TOKEN_COMMA)) {
-            buf_push(fields, parse_expression_compound_field());
+        if (!match_token(TOKEN_COMMA)) {
+            break;
         }
     }
     expect_token(TOKEN_RBRACE);
@@ -44,7 +44,7 @@ Expression* parse_expression_compound(Typespec *type) {
 
 Expression* parse_expression_operand() {
     if (is_token(TOKEN_INT)) {
-        int64_t val = token.int_val;
+        int val = token.int_val;
         next_token();
         return expression_int(val, token.location);
     } else if (is_token(TOKEN_FLOAT)) {
@@ -351,6 +351,9 @@ SwitchCase parse_statement_switch_case() {
     while (is_keyword(keywords.case_keyword) || is_keyword(keywords.default_keyword)) {
         if (match_keyword(keywords.case_keyword)) {
             buf_push(exprs, parse_expression());
+            while (match_token(TOKEN_COMMA)) {
+                buf_push(exprs, parse_expression());
+            }
         } else {
             next_token();
             if (is_default) {
@@ -434,10 +437,10 @@ Declaration* parse_declaration_enum() {
     const char *name = parse_name();
     expect_token(TOKEN_LBRACE);
     EnumItem *items = NULL;
-    if (!is_token(TOKEN_RBRACE)) {
+    while (!is_token(TOKEN_RBRACE)) {
         buf_push(items, parse_declaration_enum_item());
-        while (match_token(TOKEN_COMMA)) {
-            buf_push(items, parse_declaration_enum_item());
+        if (!match_token(TOKEN_COMMA)) {
+            break;
         }
     }
     expect_token(TOKEN_RBRACE);

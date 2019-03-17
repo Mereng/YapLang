@@ -45,13 +45,29 @@ typedef enum EntityKind {
     ENTITY_FUNC
 } EntityKind;
 
+typedef union Value {
+    char c;
+    signed char sc;
+    unsigned char uc;
+    short s;
+    unsigned short us;
+    int i;
+    unsigned int ui;
+    long l;
+    unsigned long ul;
+    long long ll;
+    unsigned long long ull;
+    float f;
+    double d;
+} Value;
+
 typedef struct Entity {
     EntityKind kind;
     EntityState state;
     const char *name;
     Declaration *decl;
     Type *type;
-    int64_t val;
+    Value val;
 
 } Entity;
 
@@ -64,16 +80,27 @@ typedef struct TypeField {
 typedef enum TypeKind {
     TYPE_NONE,
     TYPE_VOID,
-    TYPE_INT,
-    TYPE_FLOAT,
     TYPE_CHAR,
+    TYPE_SCHAR,
+    TYPE_UCHAR,
+    TYPE_SHORT,
+    TYPE_USHORT,
+    TYPE_INT,
+    TYPE_UINT,
+    TYPE_LONG,
+    TYPE_ULONG,
+    TYPE_LLONG,
+    TYPE_ULLONG,
+    TYPE_FLOAT,
+    TYPE_DOUBLE,
     TYPE_STRUCT,
     TYPE_UNION,
     TYPE_ARRAY,
     TYPE_POINTER,
     TYPE_FUNC,
     TYPE_INCOMPLETE,
-    TYPE_COMPLETING
+    TYPE_COMPLETING,
+    TYPE_MAX
 } TypeKind;
 
 
@@ -89,7 +116,7 @@ struct Type {
         } aggregate;
         struct {
             Type *base;
-            size_t size;
+            int size;
         } array;
         struct {
             Type *base;
@@ -214,11 +241,11 @@ Declaration* declaration_enum(const char *name, EnumItem *items, size_t num_item
 Declaration* declaration_struct(const char *name, AggregateItem *items, size_t num_items, SrcLocation loc);
 Declaration* declaration_union(const char *name, AggregateItem *items, size_t num_items, SrcLocation loc);
 Declaration* declaration_aggregate(DeclarationKind kind, const char *name, AggregateItem *items, size_t num_items,
-        SrcLocation loc);
+                                   SrcLocation loc);
 Declaration* declaration_var(const char *name, Typespec *type, Expression *expr, SrcLocation loc);
 Declaration* declaration_const(const char *name, Expression *expr, SrcLocation loc);
 Declaration* declaration_func(const char *name, FuncParam *params, size_t num_params, Typespec *ret_type,
-        StatementBlock body, SrcLocation loc);
+                              StatementBlock body, SrcLocation loc);
 Declaration* declaration_typedef(const char *name, Typespec *type, SrcLocation loc);
 
 struct DeclarationList {
@@ -266,7 +293,7 @@ struct Expression {
     ExpressionKind kind;
     Type *type;
     union {
-        int64_t int_val;
+        int int_val;
         double float_val;
         const char *str_val;
         const char *name;
@@ -313,7 +340,7 @@ struct Expression {
 };
 
 Expression* expression_new(ExpressionKind kind, SrcLocation loc);
-Expression* expression_int(int64_t int_val, SrcLocation loc);
+Expression* expression_int(int int_val, SrcLocation loc);
 Expression* expression_float(double float_val, SrcLocation loc);
 Expression* expression_str(const char *str_val, SrcLocation loc);
 Expression* expression_name(const char *name, SrcLocation loc);
@@ -400,7 +427,7 @@ struct Statement {
 
 Statement* statement_new(StatementKind kind, SrcLocation loc);
 Statement* statement_if(Expression *cond, StatementBlock then, ElseIf *else_ifs, size_t num_else_ifs,
-        StatementBlock else_body, SrcLocation loc);
+                        StatementBlock else_body, SrcLocation loc);
 Statement* statement_for(Statement *init, Expression *cond, Statement *next, StatementBlock body, SrcLocation loc);
 Statement* statement_while(Expression *cond, StatementBlock body, SrcLocation loc);
 Statement* statement_do_while(Expression *cond, StatementBlock body, SrcLocation loc);

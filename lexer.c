@@ -139,7 +139,7 @@ uint8_t char_to_digit[] = {
 
 
 void parse_int() {
-    uint64_t base = 10;
+    int base = 10;
     if (*stream == '0') {
         stream++;
         if (tolower(*stream) == 'x') {
@@ -155,10 +155,10 @@ void parse_int() {
             token.mod = TOKENMOD_OCT;
         }
     }
-    uint64_t val = 0;
+    int val = 0;
 
     for (;;) {
-        uint64_t digit = char_to_digit[*stream];
+        int digit = char_to_digit[*stream];
 
         if (digit == 0 && *stream != '0') {
             break;
@@ -169,7 +169,7 @@ void parse_int() {
             digit = 0;
         }
 
-        if (val > (UINT64_MAX - digit) / base) {
+        if (val > (INT_MAX - digit) / base) {
             syntax_error("Integer literal is overflow overflow");
             while (isdigit(*stream)) {
                 stream++;
@@ -418,7 +418,7 @@ void next_token() {
                 stream++;
             } else if (*stream == '/') {
                 stream++;
-                while (stream && *stream != '\n') {
+                while (*stream && *stream != '\n') {
                     stream++;
                 }
                 goto top;

@@ -131,7 +131,7 @@ Expression* expression_new(ExpressionKind kind, SrcLocation loc) {
     expr->location = loc;
     return expr;
 }
-Expression* expression_int(int64_t int_val, SrcLocation loc) {
+Expression* expression_int(int int_val, SrcLocation loc) {
     Expression *expr = expression_new(EXPR_INT, loc);
     expr->int_val = int_val;
     return expr;
