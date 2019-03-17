@@ -1,3 +1,5 @@
+#include <ast.h>
+
 char *gen_buf = NULL;
 int gen_indent = 0;
 SrcLocation gen_location;
@@ -339,8 +341,14 @@ void generate_statement(Statement *stmt) {
                 if (_case.is_default) {
                     genlnf("default:");
                 }
-                genf(" ");
-                generate_statement_block(_case.body);
+                genf(" {");
+                gen_indent++;
+                for (size_t j = 0; j < _case.body.num_statements; j++) {
+                    generate_statement(_case.body.statements[j]);
+                }
+                genlnf("break;");
+                gen_indent--;
+                genlnf("}");
             }
             genlnf("}");
             break;
@@ -423,8 +431,8 @@ void generate_aggregate(Declaration *decl) {
     gen_indent++;
     for (size_t i = 0; i < decl->aggregate.num_items; i++) {
         AggregateItem item = decl->aggregate.items[i];
-        generate_sync_location(item.location);
         for (size_t j = 0; j < item.num_names; j++) {
+            generate_sync_location(item.location);
             genlnf("%s;", typespec_to_cdecl(item.type, item.names[j]));
         }
     }
@@ -466,7 +474,7 @@ void generate_entity(Entity *entity) {
             generate_aggregate(decl);
             break;
         case DECL_TYPEDEF:
-            genlnf("typedef %s;", type_to_cdecl(entity->type, entity->name));
+            genlnf("typedef %s;", typespec_to_cdecl(decl->typedef_decl.type, entity->name));
             break;
         default:
             assert(0);

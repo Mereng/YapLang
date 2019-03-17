@@ -930,11 +930,11 @@ void complete_entities() {
 }
 
 void init_entities() {
-    entity_append_type(str_intern("void"), type_void);
-    entity_append_type(str_intern("char"), type_char);
-    entity_append_type(str_intern("int"), type_int);
-    entity_append_type(str_intern("float"), type_float);
-    entity_append_func(str_intern("puts"), type_func((Type*[]){type_pointer(type_char)}, 1, type_int));
+    entity_append_type("void", type_void);
+    entity_append_type("char", type_char);
+    entity_append_type("int", type_int);
+    entity_append_type("float", type_float);
+    entity_append_func("puts", type_func((Type*[]){type_pointer(type_char)}, 1, type_int));
 }
 
 void entities_append_declaration_list(DeclarationList *decl_list) {

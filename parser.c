@@ -420,15 +420,17 @@ Statement* parse_statement() {
 }
 
 EnumItem parse_declaration_enum_item() {
+    SrcLocation location = token.location;
     const char *name = parse_name();
     Expression *init = NULL;
     if (match_token(TOKEN_ASSIGN)) {
         init = parse_expression();
     }
-    return (EnumItem){name, init, token.location};
+    return (EnumItem){name, init, location};
 }
 
 Declaration* parse_declaration_enum() {
+    SrcLocation location = token.location;
     const char *name = parse_name();
     expect_token(TOKEN_LBRACE);
     EnumItem *items = NULL;
@@ -439,10 +441,11 @@ Declaration* parse_declaration_enum() {
         }
     }
     expect_token(TOKEN_RBRACE);
-    return declaration_enum(name, ast_dup(items, buf_sizeof(items)), buf_len(items), token.location);
+    return declaration_enum(name, ast_dup(items, buf_sizeof(items)), buf_len(items), location);
 }
 
 AggregateItem parse_declaration_aggregate_item() {
+    SrcLocation location = token.location;
     const char **names = NULL;
     buf_push(names, parse_name());
     while (match_token(TOKEN_COMMA)) {
@@ -451,7 +454,7 @@ AggregateItem parse_declaration_aggregate_item() {
     expect_token(TOKEN_COLON);
     Typespec *type = parse_type();
     expect_token(TOKEN_SEMICOLON);
-    return (AggregateItem){ast_dup(names, buf_sizeof(names)), buf_len(names), type, token.location};
+    return (AggregateItem){ast_dup(names, buf_sizeof(names)), buf_len(names), type, location};
 }
 
 Declaration* parse_declaration_aggregate(DeclarationKind kind, SrcLocation location) {
