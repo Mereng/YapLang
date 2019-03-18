@@ -1,5 +1,3 @@
-#include <ast.h>
-
 Type *type_void = &(Type){TYPE_VOID, 0};
 Type *type_char = &(Type){TYPE_CHAR, 1, 1};
 Type *type_schar = &(Type){TYPE_SCHAR, 1, 1};
