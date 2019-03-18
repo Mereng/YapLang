@@ -21,21 +21,11 @@ void genln() {
 #define genlnf(...) (genln(), genf(__VA_ARGS__))
 
 const char* cdecl_name(Type *type) {
-    switch (type->kind) {
-        case TYPE_VOID:
-            return "void";
-        case TYPE_CHAR:
-            return "char";
-        case TYPE_INT:
-            return "int";
-        case TYPE_FLOAT:
-            return "float";
-        case TYPE_STRUCT:
-        case TYPE_UNION:
-            return type->entity->name;
-        default:
-            assert(0);
-            return NULL;
+    const char *name = type_names[type->kind];
+    if (name) {
+        return name;
+    } else {
+        return type->entity->name;
     }
 }
 
@@ -47,13 +37,6 @@ void generate_expression(Expression *expr);
 
 char* type_to_cdecl(Type *type, const char *str) {
     switch (type->kind) {
-        case TYPE_VOID:
-        case TYPE_CHAR:
-        case TYPE_INT:
-        case TYPE_FLOAT:
-        case TYPE_STRUCT:
-        case TYPE_UNION:
-            return stringf("%s%s%s", cdecl_name(type), *str ? " ": "", str);
         case TYPE_ARRAY:
             return type_to_cdecl(type->array.base, cdecl_paren(stringf("%s[%"PRIu64"]", str, type->array.size), *str));
         case TYPE_POINTER:
@@ -72,8 +55,7 @@ char* type_to_cdecl(Type *type, const char *str) {
             return type_to_cdecl(type->func.ret, buf);
         }
         default:
-            assert(0);
-            return NULL;
+            return stringf("%s%s%s", cdecl_name(type), *str ? " ": "", str);;
     }
 }
 

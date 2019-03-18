@@ -75,6 +75,7 @@ typedef struct Entity {
 typedef struct TypeField {
     const char *name;
     Type *type;
+    size_t offset;
 } TypeField;
 
 typedef enum TypeKind {
@@ -125,6 +126,7 @@ struct Type {
             Type **args;
             size_t num_args;
             Type *ret;
+            bool variadic;
         } func;
     };
 };

@@ -15,7 +15,7 @@ Type *type_ullong = &(Type){TYPE_ULONG, 8, 8};
 Type *type_float = &(Type){TYPE_FLOAT, 4, 4};
 Type *type_double = &(Type){TYPE_DOUBLE, 8, 8};
 
-#define type_size type_int
+#define type_size type_ullong
 
 typedef struct ResolvedExpression {
     Type *type;
@@ -88,7 +88,7 @@ ResolvedExpression resolved_const(Type *type, Value val) {
                 operand->val.d = (double)operand->val.t; \
                 break; \
             default: \
-                assert(0); \
+                operand->is_const = false; \
                 break; \
         } \
         break;
@@ -197,13 +197,14 @@ typedef struct FuncTypeCached {
     size_t num_params;
     Type *ret;
     Type *func;
+    bool variadic;
 } FuncTypeCached;
 
 FuncTypeCached *func_type_cache;
 
-Type* type_func(Type **params, size_t num_params, Type *ret) {
+Type* type_func(Type **params, size_t num_params, Type *ret, bool variadic) {
     for (FuncTypeCached *it = func_type_cache; it != buf_end(func_type_cache); it++) {
-        if (it->num_params == num_params && it->ret == ret) {
+        if (it->num_params == num_params && it->ret == ret && it->variadic == variadic) {
             bool isMatch = true;
             for (size_t i = 0; i < num_params; i++) {
                 if (it->params[i] != params[i]) {
@@ -225,6 +226,7 @@ Type* type_func(Type **params, size_t num_params, Type *ret) {
     memcpy(type->func.args, params, num_params * sizeof(Type*));
     type->func.num_args = num_params;
     type->func.ret = ret;
+    type->func.variadic = variadic;
     buf_push(func_type_cache, ((FuncTypeCached){params, num_params, ret, type}));
     return type;
 }
@@ -255,6 +257,23 @@ bool issigned(Type *type) {
             return false;
     }
 }
+
+const char *type_names[TYPE_MAX] = {
+    [TYPE_VOID] = "void",
+    [TYPE_CHAR] = "char",
+    [TYPE_SCHAR] = "schar",
+    [TYPE_UCHAR] = "uchar",
+    [TYPE_SHORT] = "short",
+    [TYPE_USHORT] = "ushort",
+    [TYPE_INT] = "int",
+    [TYPE_UINT] = "uint",
+    [TYPE_LONG] = "long",
+    [TYPE_ULONG] = "ulong",
+    [TYPE_LLONG] = "llong",
+    [TYPE_ULLONG] = "ullong",
+    [TYPE_FLOAT] = "float",
+    [TYPE_DOUBLE] = "double",
+};
 
 int type_ranks[TYPE_MAX] = {
     [TYPE_CHAR] = 1,
@@ -324,6 +343,7 @@ void type_complete_struct(Type* type, TypeField *fields, size_t num_fields) {
     type->size = 0;
     type->align = 0;
     for (TypeField *it = fields; it != fields + num_fields; it++) {
+        it->offset = type->size;
         type->size = it->type->size + ALIGN_UP(type->size, it->type->align);
         type->align = MAX(type->align, it->type->align);
     }
@@ -336,6 +356,7 @@ void type_complete_union(Type* type, TypeField *fields, size_t num_fields) {
     type->kind = TYPE_UNION;
     type->size = 0;
     for (TypeField *it = fields; it != fields + num_fields; it++) {
+        it->offset = 0;
         type->size = MAX(it->type->size, type->size);
         type->align = MAX(it->type->align, type->align);
     }
@@ -776,14 +797,14 @@ ResolvedExpression resolve_expression_unary(Expression *expr) {
             }
             return (ResolvedExpression){type_pointer(operand.type)};
         default:
-            if (operand.type->kind != TYPE_INT) {
+            if (!is_integer_type(operand.type)) {
                 fatal_error(expr->location, "%s is working yet for ints", token_kind_names[expr->unary.op]);
             }
-
+            promote_expression(&operand);
             if (operand.is_const) {
-                return resolved_const(type_int, eval_unary(expr->unary.op, operand.type,  operand.val));
+                return resolved_const(operand.type, eval_unary(expr->unary.op, operand.type,  operand.val));
             } else {
-                resolved_rvalue(operand.type);
+                return operand;
             }
     }
 
@@ -838,59 +859,56 @@ ResolvedExpression resolve_expression_compound(Expression *expr, Type *expected_
         type = expected_type;
     }
     complete_type(type);
-    if (type->kind != TYPE_STRUCT && type->kind != TYPE_UNION && type->kind != TYPE_ARRAY) {
-        fatal_error(expr->location, "Compound literals can only be user with struct, union or array types");
-    }
 
     if (type->kind == TYPE_STRUCT || type->kind == TYPE_UNION) {
         int index = 0;
         for (size_t i = 0; i < expr->compound.num_fields; i++) {
             CompoundField field = expr->compound.fields[i];
             if (field.kind == COMPOUNDFIELD_INDEX) {
-                fatal_error(field.init->location, "Index in compound literal for struct or union not allowed");
+                fatal_error(field.location, "Index in compound literal for struct or union not allowed");
             } else if (field.kind == COMPOUNDFIELD_NAME) {
                 index = aggregate_field_index(type, field.name);
                 if (index == -1) {
-                    fatal_error(field.init->location, "Named field %s does not exist", field.name);
+                    fatal_error(field.location, "Named field %s does not exist", field.name);
                 }
             }
             if (index >= type->aggregate.num_fields) {
-                fatal_error(field.init->location, "Field initializer in struct or union compound out of range");
+                fatal_error(field.location, "Field initializer in struct or union compound out of range");
             }
             Type *field_type = type->aggregate.fields[index].type;
             ResolvedExpression init = resolve_expression_expected_type(field.init, field_type);
             if (!convert_expression(&init, field_type)) {
-                fatal_error(field.init->location, "Illegal conversion");
+                fatal_error(field.location, "Illegal conversion");
             }
             index++;
         }
-    } else {
+    } else if (type->kind == TYPE_ARRAY) {
         int index = 0, index_max = 0;
         for (size_t i = 0; i < expr->compound.num_fields; i++) {
             CompoundField field = expr->compound.fields[i];
             if (field.kind == COMPOUNDFIELD_NAME) {
-                fatal_error(field.init->location, "Named field not allowed for array");
+                fatal_error(field.location, "Named field not allowed for array");
             } else if (field.kind == COMPOUNDFIELD_INDEX) {
                 ResolvedExpression tmp_indx= resolve_const_expression(field.index);
                 if (!is_integer_type(tmp_indx.type)) {
-                    fatal_error(field.init->location, "Field initializer index must have integer type");
+                    fatal_error(field.location, "Field initializer index must have integer type");
                 }
                 if (!convert_expression(&tmp_indx, type_int)) {
-                    fatal_error(field.init->location, "Illegal conversion in initializer index");
+                    fatal_error(field.location, "Illegal conversion in initializer index");
                 }
                 if (tmp_indx.val.i < 0) {
-                    fatal_error(expr->location, "Field initializer index can't be negative");
+                    fatal_error(field.location, "Field initializer index can't be negative");
                 }
                 index = tmp_indx.val.i;
             }
 
             if (type->array.size && index >= type->aggregate.num_fields) {
-                fatal_error(field.init->location, "Field initializer in array out of range");
+                fatal_error(field.location, "Field initializer in array out of range");
             }
             ResolvedExpression init_val = resolve_expression_expected_type(expr->compound.fields[i].init,
                     type->array.base);
             if (!convert_expression(&init_val, type->array.base)) {
-                fatal_error(expr->location, "Illegal conversion in initializer");
+                fatal_error(field.location, "Illegal conversion in initializer");
             }
             index_max = MAX(index_max, index);
             index++;
@@ -898,8 +916,17 @@ ResolvedExpression resolve_expression_compound(Expression *expr, Type *expected_
         if (type->array.size == 0) {
             type = type_array(type->array.base, index_max + 1);
         }
+    } else {
+        if (expr->compound.num_fields != 1) {
+            fatal_error(expr->location, "Compound literal is invalid");
+        }
+        CompoundField field = expr->compound.fields[0];
+        ResolvedExpression init_val = resolve_expression_expected_type(field.init, type);
+        if (!convert_expression(&init_val, type)) {
+            fatal_error(field.location, "Illegal conversion in compound literal");
+        }
     }
-    return resolved_rvalue(type);
+    return resolved_lvalue(type);
 }
 
 ResolvedExpression resolve_expression_call(Expression *expr) {
@@ -909,16 +936,25 @@ ResolvedExpression resolve_expression_call(Expression *expr) {
         fatal_error(expr->location, "Calling non-function value");
     }
 
-    if (expr->call.num_args != operand.type->func.num_args) {
-        fatal_error(expr->location, "Calling function with wrong number of arguments ");
+    size_t num_args = operand.type->func.num_args;
+    if (expr->call.num_args < num_args) {
+        fatal_error(expr->location, "Calling function with too few arguments");
     }
 
-    for (size_t i = 0; i < expr->call.num_args; i++) {
+    if (expr->call.num_args > num_args && !operand.type->func.variadic) {
+        fatal_error(expr->location, "Calling function with too many arguments");
+    }
+
+    for (size_t i = 0; i < num_args; i++) {
         Type *param = operand.type->func.args[i];
         ResolvedExpression arg = resolve_expression_expected_type(expr->call.args[i], param);
         if (!convert_expression(&arg, param)) {
             fatal_error(expr->call.args[i]->location, "Call argument expression typespec doesn't match expected typespec");
         }
+    }
+
+    for (size_t i = num_args; i < expr->call.num_args; i++) {
+        resolve_expression(expr->call.args[i]);
     }
 
     return resolved_rvalue(operand.type->func.ret);
@@ -1180,7 +1216,7 @@ Type* resolve_typespec(Typespec *typespec) {
             if (typespec->func.ret) {
                 ret = resolve_typespec(typespec->func.ret);
             }
-            type = type_func(args, buf_len(args), ret);
+            type = type_func(args, buf_len(args), ret, false);
             break;
         }
         default:
@@ -1239,7 +1275,7 @@ Type* resolve_declaration_func(Declaration *decl) {
     if (decl->func.return_type) {
         ret = resolve_typespec(decl->func.return_type);
     }
-    return type_func(params, buf_len(params), ret);
+    return type_func(params, buf_len(params), ret, false);
 }
 
 void resolve_func(Entity *entity) {
@@ -1319,13 +1355,17 @@ void init_entities() {
     entity_append_type("uchar", type_uchar);
     entity_append_type("int", type_int);
     entity_append_type("uint", type_uint);
-    entity_append_type("ulong", type_long);
+    entity_append_type("short", type_short);
+    entity_append_type("ushort", type_ushort);
+    entity_append_type("long", type_long);
     entity_append_type("ulong", type_ulong);
     entity_append_type("llong", type_llong);
     entity_append_type("ullong", type_ullong);
     entity_append_type("float", type_float);
-    entity_append_func("puts", type_func((Type*[]){type_pointer(type_char)}, 1, type_int));
-    entity_append_func("getchar", type_func(NULL, 0, type_int));
+
+    entity_append_func("puts", type_func((Type*[]){type_pointer(type_char)}, 1, type_int, false));
+    entity_append_func("printf", type_func((Type*[]){type_pointer(type_char)}, 1, type_int, true));
+    entity_append_func("getchar", type_func(NULL, 0, type_int, false));
 }
 
 void entities_append_declaration_list(DeclarationList *decl_list) {

@@ -32,6 +32,7 @@ char* read_file(const char *path) {
         }
     }
     fclose(file);
+    buf[size] = 0;
     return buf;
 }
 

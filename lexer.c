@@ -85,6 +85,7 @@ const char *token_kind_names[] = {
         [TOKEN_OR] = "||",
         [TOKEN_INC] = "++",
         [TOKEN_DEC] = "--",
+        [TOKEN_ASSIGN] = "=",
         [TOKEN_AUTO_ASSIGN] = ":=",
         [TOKEN_ADD_ASSIGN] = "+=",
         [TOKEN_SUB_ASSIGN] = "-=",

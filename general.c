@@ -12,6 +12,7 @@ void error(SrcLocation location, const char* fmt, ...) {
     printf("%s (%d) ", location.name, location.line);
     vprintf(fmt, args);
     va_end(args);
+    printf("\n");
 }
 
 void fatal(const char *fmt, ...) {
