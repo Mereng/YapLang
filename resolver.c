@@ -1,3 +1,5 @@
+#include <ast.h>
+
 Type *type_void = &(Type){TYPE_VOID, 0};
 Type *type_char = &(Type){TYPE_CHAR, 1, 1};
 Type *type_schar = &(Type){TYPE_SCHAR, 1, 1};
@@ -224,7 +226,7 @@ Type* type_func(Type **params, size_t num_params, Type *ret, bool variadic) {
     memcpy(type->func.args, params, num_params * sizeof(Type*));
     type->func.num_args = num_params;
     type->func.ret = ret;
-    type->func.variadic = variadic;
+    type->func.is_variadic = variadic;
     buf_push(func_type_cache, ((FuncTypeCached){params, num_params, ret, type}));
     return type;
 }
@@ -915,13 +917,15 @@ ResolvedExpression resolve_expression_compound(Expression *expr, Type *expected_
             type = type_array(type->array.base, index_max + 1);
         }
     } else {
-        if (expr->compound.num_fields != 1) {
+        if (expr->compound.num_fields > 1) {
             fatal_error(expr->location, "Compound literal is invalid");
         }
-        CompoundField field = expr->compound.fields[0];
-        ResolvedExpression init_val = resolve_expression_expected_type(field.init, type);
-        if (!convert_expression(&init_val, type)) {
-            fatal_error(field.location, "Illegal conversion in compound literal");
+        if (expr->compound.num_fields == 1) {
+            CompoundField field = expr->compound.fields[0];
+            ResolvedExpression init_val = resolve_expression_expected_type(field.init, type);
+            if (!convert_expression(&init_val, type)) {
+                fatal_error(field.location, "Illegal conversion in compound literal");
+            }
         }
     }
     return resolved_lvalue(type);
@@ -939,7 +943,7 @@ ResolvedExpression resolve_expression_call(Expression *expr) {
         fatal_error(expr->location, "Calling function with too few arguments");
     }
 
-    if (expr->call.num_args > num_args && !operand.type->func.variadic) {
+    if (expr->call.num_args > num_args && !operand.type->func.is_variadic) {
         fatal_error(expr->location, "Calling function with too many arguments");
     }
 
@@ -1138,7 +1142,7 @@ void resolve_statement(Statement *stmt, Type *ret_type) {
                 fatal_error(stmt->location, "Can't assign to non-lvalue");
             }
             if (stmt->assign.right) {
-                ResolvedExpression right = resolve_expression(stmt->assign.right);
+                ResolvedExpression right = resolve_expression_expected_type(stmt->assign.right, left.type);
                 if (!convert_expression(&right, left.type)) {
                     fatal_error(stmt->location, "Illegal conversion right to left operand");
                 }
@@ -1180,8 +1184,11 @@ Type* resolve_typespec(Typespec *typespec) {
     switch (typespec->kind) {
         case TYPESPEC_NAME: {
             Entity *entity = resolve_entity_name(typespec->name);
+            if (!entity) {
+                fatal_error(typespec->location, "unknown type name '%s'", typespec->name);
+            }
             if (entity->kind != ENTITY_TYPE) {
-                fatal_error(typespec->location, "%s must be typespec", typespec->name);
+                fatal_error(typespec->location, "%s must be type", typespec->name);
             }
             type = entity->type;
             break;
@@ -1214,7 +1221,7 @@ Type* resolve_typespec(Typespec *typespec) {
             if (typespec->func.ret) {
                 ret = resolve_typespec(typespec->func.ret);
             }
-            type = type_func(args, buf_len(args), ret, false);
+            type = type_func(args, buf_len(args), ret, typespec->func.is_variadic);
             break;
         }
         default:
@@ -1273,7 +1280,7 @@ Type* resolve_declaration_func(Declaration *decl) {
     if (decl->func.return_type) {
         ret = resolve_typespec(decl->func.return_type);
     }
-    return type_func(params, buf_len(params), ret, false);
+    return type_func(params, buf_len(params), ret, decl->func.is_variadic);
 }
 
 void resolve_func(Entity *entity) {

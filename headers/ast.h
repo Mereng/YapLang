@@ -126,7 +126,7 @@ struct Type {
             Type **args;
             size_t num_args;
             Type *ret;
-            bool variadic;
+            bool is_variadic;
         } func;
     };
 };
@@ -151,6 +151,7 @@ struct Typespec {
             Typespec **args;
             size_t num_args;
             Typespec *ret;
+            bool is_variadic;
         } func;
         struct {
             Typespec *base;
@@ -166,7 +167,7 @@ Typespec* typespec_new(TypespecKind kind, SrcLocation loc);
 Typespec* typespec_name(const char *name, SrcLocation loc);
 Typespec* typespec_pointer(Typespec *base, SrcLocation loc);
 Typespec* typespec_array(Typespec *base, Expression *size, SrcLocation loc);
-Typespec* typespec_func(Typespec **args, size_t num_args, Typespec *ret, SrcLocation loc);
+Typespec* typespec_func(Typespec **args, size_t num_args, Typespec *ret, bool is_variadic, SrcLocation loc);
 
 
 struct StatementBlock {
@@ -229,6 +230,7 @@ struct Declaration {
             FuncParam *params;
             size_t num_params;
             Typespec *return_type;
+            bool is_variadic;
             StatementBlock body;
         } func;
         struct {
@@ -247,7 +249,7 @@ Declaration* declaration_aggregate(DeclarationKind kind, const char *name, Aggre
 Declaration* declaration_var(const char *name, Typespec *type, Expression *expr, SrcLocation loc);
 Declaration* declaration_const(const char *name, Expression *expr, SrcLocation loc);
 Declaration* declaration_func(const char *name, FuncParam *params, size_t num_params, Typespec *ret_type,
-                              StatementBlock body, SrcLocation loc);
+                              bool is_variadic, StatementBlock body, SrcLocation loc);
 Declaration* declaration_typedef(const char *name, Typespec *type, SrcLocation loc);
 
 struct DeclarationList {

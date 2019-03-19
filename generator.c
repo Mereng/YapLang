@@ -51,6 +51,11 @@ char* type_to_cdecl(Type *type, const char *str) {
                     buf_printf(buf, "%s%s", i == 0 ? "": ",", type_to_cdecl(type->func.args[i], ""));
                 }
             }
+
+            if (type->func.is_variadic) {
+                buf_printf(buf, ", ...");
+            }
+
             buf_printf(buf, ")");
             return type_to_cdecl(type->func.ret, buf);
         }
@@ -83,6 +88,11 @@ char* typespec_to_cdecl(Typespec *typespec, const char *str) {
                     buf_printf(buf, "%s%s", i == 0 ? "": ",", typespec_to_cdecl(typespec->func.args[i], ""));
                 }
             }
+
+            if (typespec->func.is_variadic) {
+                buf_printf(buf, ", ...");
+            }
+
             buf_printf(buf, ")");
             if (typespec->func.ret) {
                 return typespec_to_cdecl(typespec->func.ret, buf);
@@ -156,6 +166,11 @@ void generate_expression_compound(Expression *expr, bool is_auto_assign) {
         }
         generate_expression(field.init);
     }
+
+    if (expr->compound.num_fields == 0) {
+        genf("0");
+    }
+
     genf("}");
 }
 
@@ -403,6 +418,11 @@ void generate_func_declaration(Declaration *decl) {
             genf("%s", typespec_to_cdecl(param.type, param.name));
         }
     }
+
+    if (decl->func.is_variadic) {
+        genf(", ...");
+    }
+
     genf(")");
 }
 

@@ -56,7 +56,8 @@ typedef enum TokenKind {
     TOKEN_DOT,
     TOKEN_COMMA,
     TOKEN_SEMICOLON,
-    TOKEN_QUESTION_MARK
+    TOKEN_QUESTION_MARK,
+    TOKEN_ELLIPSIS
 } TokenKind;
 
 typedef enum TokenMod {

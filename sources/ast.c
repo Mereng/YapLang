@@ -52,11 +52,12 @@ Typespec* typespec_array(Typespec *base, Expression *size, SrcLocation loc) {
     typespec->array.size = size;
     return typespec;
 }
-Typespec* typespec_func(Typespec **args, size_t num_args, Typespec *ret, SrcLocation loc) {
+Typespec* typespec_func(Typespec **args, size_t num_args, Typespec *ret, bool is_variadic, SrcLocation loc) {
     Typespec *typespec = typespec_new(TYPESPEC_FUNC, loc);
     typespec->func.args = args;
     typespec->func.num_args = num_args;
     typespec->func.ret = ret;
+    typespec->func.is_variadic = is_variadic;
     return typespec;
 }
 
@@ -104,11 +105,12 @@ Declaration* declaration_const(const char *name, Expression *expr, SrcLocation l
     return decl;
 }
 Declaration* declaration_func(const char *name, FuncParam *params, size_t num_params, Typespec *ret_type,
-        StatementBlock body, SrcLocation loc) {
+        bool is_variadic, StatementBlock body, SrcLocation loc) {
     Declaration *decl = declaration_new(DECL_FUNC, name, loc);
     decl->func.params = params;
     decl->func.num_params = num_params;
     decl->func.return_type = ret_type;
+    decl->func.is_variadic = is_variadic;
     decl->func.body = body;
     return decl;
 }

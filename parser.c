@@ -92,7 +92,6 @@ Expression* parse_expression_operand() {
         }
     } else {
         fatal_syntax("Unexpected token %s in expression", token_str(token));
-        return NULL;
     }
 }
 
@@ -204,21 +203,33 @@ Expression* parse_expression_paren() {
 }
 
 Typespec *parse_type_func() {
+    SrcLocation location = token.location;
     Typespec **args = NULL;
+    bool is_variadic = false;
     expect_token(TOKEN_LPAREN);
     if (!is_token(TOKEN_RPAREN)) {
         buf_push(args, parse_type());
         while (match_token(TOKEN_COMMA)) {
-            buf_push(args, parse_type());
+            if (match_token(TOKEN_ELLIPSIS)){
+                if (is_variadic) {
+                    syntax_error("Multiple ellipsis instances in function type");
+                }
+                is_variadic = true;
+            } else {
+                if (is_variadic) {
+                    syntax_error("Ellipsis must be last parameter");
+                }
+                buf_push(args, parse_type());
+            }
         }
-        expect_token(TOKEN_RPAREN);
     }
+    expect_token(TOKEN_RPAREN);
     Typespec *ret = NULL;
     if (match_token(TOKEN_COLON)) {
         ret = parse_type();
     }
 
-    return typespec_func(ast_dup(args, buf_sizeof(args)), buf_len(args), ret, token.location);
+    return typespec_func(ast_dup(args, buf_sizeof(args)), buf_len(args), ret, is_variadic, location);
 }
 
 Typespec *parse_type_base() {
@@ -238,6 +249,7 @@ Typespec *parse_type_base() {
 }
 
 Typespec *parse_type() {
+    SrcLocation location = token.location;
     Typespec *type = parse_type_base();
 
     while (is_token(TOKEN_LBRACKET) || is_token(TOKEN_MUL)) {
@@ -247,10 +259,10 @@ Typespec *parse_type() {
                 expr = parse_expression();
             }
             expect_token(TOKEN_RBRACKET);
-            type = typespec_array(type, expr, token.location);
+            type = typespec_array(type, expr, location);
         } else {
             next_token();
-            type = typespec_pointer(type, token.location);
+            type = typespec_pointer(type, location);
         }
     }
     return type;
@@ -512,10 +524,21 @@ Declaration* parse_declaration_func(SrcLocation location) {
     const char *name = parse_name();
     expect_token(TOKEN_LPAREN);
     FuncParam *params = NULL;
+    bool is_variadic = false;
     if (!is_token(TOKEN_RPAREN)) {
         buf_push(params, parse_declaration_func_param());
         while (match_token(TOKEN_COMMA)) {
-            buf_push(params, parse_declaration_func_param());
+            if (match_token(TOKEN_ELLIPSIS)) {
+                if (is_variadic) {
+                    syntax_error("Multiple ellipsis in function declaration");
+                }
+                is_variadic = true;
+            } else {
+                if (is_variadic) {
+                    syntax_error("Ellipsis must be last parameter");
+                }
+                buf_push(params, parse_declaration_func_param());
+            }
         }
     }
     expect_token(TOKEN_RPAREN);
@@ -524,7 +547,7 @@ Declaration* parse_declaration_func(SrcLocation location) {
         ret = parse_type();
     }
     StatementBlock block = parse_statement_block();
-    return declaration_func(name, ast_dup(params, buf_sizeof(params)), buf_len(params), ret, block, location);
+    return declaration_func(name, ast_dup(params, buf_sizeof(params)), buf_len(params), ret, is_variadic, block, location);
 }
 
 Declaration* try_parse_declaration() {

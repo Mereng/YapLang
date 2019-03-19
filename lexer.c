@@ -1,5 +1,3 @@
-#include <token.h>
-
 struct {
     const char *func_keyword;
     const char *var_keyword;
@@ -110,7 +108,8 @@ const char *token_kind_names[] = {
         [TOKEN_DOT] = ".",
         [TOKEN_COMMA] = ",",
         [TOKEN_SEMICOLON] = ";",
-        [TOKEN_QUESTION_MARK] = "?"
+        [TOKEN_QUESTION_MARK] = "?",
+        [TOKEN_ELLIPSIS] = "...",
 };
 
 uint8_t char_to_digit[] = {
@@ -262,7 +261,7 @@ void parse_char() {
 
     token.kind = TOKEN_INT;
     token.mod = TOKENMOD_CHAR;
-    token.int_val = (uint64_t) val;
+    token.int_val = val;
 }
 
 void parse_str() {
@@ -349,6 +348,9 @@ void next_token() {
         case '.':
             if (isdigit(stream[1])) {
                 parse_float();
+            } else if(stream[1] == '.' && stream[2] == '.') {
+                token.kind = TOKEN_ELLIPSIS;
+                stream += 3;
             } else {
                 token.kind = TOKEN_DOT;
                 stream++;
