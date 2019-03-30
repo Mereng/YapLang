@@ -1,3 +1,4 @@
+#include <stdio.h>
 #include <tools.h>
 #include <stdarg.h>
 #include <malloc.h>

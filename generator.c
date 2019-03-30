@@ -177,7 +177,7 @@ void generate_expression_compound(Expression *expr, bool is_auto_assign) {
 void generate_expression(Expression *expr) {
     switch (expr->kind) {
         case EXPR_INT:
-            genf("%"PRId64, expr->int_val);
+            genf("%"PRId32, expr->int_val);
             break;
         case EXPR_FLOAT:
             genf("%ff", expr->float_val);
