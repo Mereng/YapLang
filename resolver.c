@@ -74,7 +74,7 @@ bool is_scalar_type(Type *type) {
                 operand->val.uc = (unsigned char)operand->val.t; \
                 break; \
             case TYPE_BOOL: \
-                operand->val.b = operand->val.t != 0; \
+                operand->val.b = (bool)operand->val.t; \
                 break; \
             case TYPE_SHORT:\
                 operand->val.s = (short)operand->val.t; \
@@ -345,6 +345,10 @@ Entity *local_entities_end = local_entities;
 Entity **entities_ordered;
 
 void global_entities_put(Entity *entity) {
+    if (map_get(&global_entities, (void*)entity->name)) {
+        SrcLocation location = entity->decl ? entity->decl->location : (SrcLocation){0};
+        fatal_error(location, "Duplicate definition");
+    }
     map_put(&global_entities, (void*)entity->name, entity);
     buf_push(global_entities_buf, entity);
 }
@@ -466,17 +470,25 @@ Entity *entity_enum_const(const char *name, Declaration *declaration) {
     return entity_new(ENTITY_ENUM_CONST, name, declaration);
 }
 
-Entity* entity_get(const char *name) {
+Entity* entity_get_local(const char *name) {
     for (Entity *it = local_entities_end; it != local_entities; it--) {
         Entity *entity = it - 1;
         if (entity->name == name) {
             return entity;
         }
     }
-    return map_get(&global_entities, (void*)name);
+    return NULL;
 }
 
-void local_entities_push_var(const char *name, Type *type) {
+Entity* entity_get(const char *name) {
+    Entity *entity = entity_get_local(name);
+    return entity ? entity : map_get(&global_entities, (void*)name);
+}
+
+bool local_entities_push_var(const char *name, Type *type) {
+    if (entity_get_local(name)) {
+        return false;
+    }
     if (local_entities_end == local_entities + MAX_LOCAL_ENTITIES) {
         fatal("Too many local entities in %s", type->entity->name);
     }
@@ -486,6 +498,7 @@ void local_entities_push_var(const char *name, Type *type) {
         .kind = ENTITY_VAR,
         .state = ENTITY_RESOLVED
     };
+    return true;
 }
 
 Entity *local_scope_enter() {
@@ -1084,23 +1097,38 @@ ResolvedExpression resolve_expression_compound(Expression *expr, Type *expected_
 }
 
 ResolvedExpression resolve_expression_call(Expression *expr) {
-    ResolvedExpression operand = resolve_expression(expr->call.operand);
-    complete_type(operand.type);
-    if (operand.type->kind != TYPE_FUNC) {
+
+    if (expr->call.operand->kind == EXPR_NAME) {
+        Entity *entity = resolve_entity_name(expr->call.operand->name);
+        if (entity->kind == ENTITY_TYPE) {
+            if (expr->call.num_args != 1) {
+                fatal_error(expr->location, "Type conversion is invalid, operator takes 1 argument");
+            }
+            ResolvedExpression operand = resolve_expression(expr->call.args[0]);
+            if (!convert_expression(&operand, entity->type)) {
+                fatal_error(expr->location, "Invalid type conversion");
+            }
+            return operand;
+        }
+    }
+
+    ResolvedExpression func = resolve_expression(expr->call.operand);
+    complete_type(func.type);
+    if (func.type->kind != TYPE_FUNC) {
         fatal_error(expr->location, "Calling non-function value");
     }
 
-    size_t num_args = operand.type->func.num_args;
+    size_t num_args = func.type->func.num_args;
     if (expr->call.num_args < num_args) {
         fatal_error(expr->location, "Calling function with too few arguments");
     }
 
-    if (expr->call.num_args > num_args && !operand.type->func.is_variadic) {
+    if (expr->call.num_args > num_args && !func.type->func.is_variadic) {
         fatal_error(expr->location, "Calling function with too many arguments");
     }
 
     for (size_t i = 0; i < num_args; i++) {
-        Type *param = operand.type->func.args[i];
+        Type *param = func.type->func.args[i];
         ResolvedExpression arg = resolve_expression_expected_type(expr->call.args[i], param);
         if (!convert_expression(&arg, param)) {
             fatal_error(expr->call.args[i]->location, "Call argument expression typespec doesn't match expected typespec");
@@ -1111,7 +1139,7 @@ ResolvedExpression resolve_expression_call(Expression *expr) {
         resolve_expression(expr->call.args[i]);
     }
 
-    return resolved_rvalue(operand.type->func.ret);
+    return resolved_rvalue(func.type->func.ret);
 }
 
 ResolvedExpression resolve_expression_ternary(Expression *expr, Type *expected_type) {
@@ -1319,7 +1347,9 @@ bool resolve_statement(Statement *stmt, Type *ret_type) {
             return false;
         }
         case STMT_AUTO_ASSIGN:
-            local_entities_push_var(stmt->auto_assign.name, resolve_expression(stmt->auto_assign.init).type);
+            if(!local_entities_push_var(stmt->auto_assign.name, resolve_expression(stmt->auto_assign.init).type)) {
+                fatal_error(stmt->location, "Duplicate definition");
+            }
             return false;
         case STMT_RETURN:
             if (stmt->expr) {

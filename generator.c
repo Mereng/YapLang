@@ -194,7 +194,9 @@ void generate_expression(Expression *expr) {
             genf(")");
             break;
         case EXPR_CALL:
+            genf("(");
             generate_expression(expr->call.operand);
+            genf(")");
             genf("(");
             for (size_t i = 0; i < expr->call.num_args; i++) {
                 if (i != 0) {
