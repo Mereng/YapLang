@@ -202,13 +202,24 @@ Expression* parse_expression_paren() {
     return expr;
 }
 
-Typespec *parse_type_func() {
+Typespec* parse_type_func_param() {
+    Typespec *type = parse_type();
+    if (match_token(TOKEN_COLON)) {
+        if (type->kind != TYPESPEC_NAME) {
+            syntax_error("Colons in parameters of function type must be preceded by names");
+        }
+        type = parse_type();
+    }
+    return type;
+}
+
+Typespec* parse_type_func() {
     SrcLocation location = token.location;
     Typespec **args = NULL;
     bool is_variadic = false;
     expect_token(TOKEN_LPAREN);
     if (!is_token(TOKEN_RPAREN)) {
-        buf_push(args, parse_type());
+        buf_push(args, parse_type_func_param());
         while (match_token(TOKEN_COMMA)) {
             if (match_token(TOKEN_ELLIPSIS)){
                 if (is_variadic) {
@@ -219,7 +230,7 @@ Typespec *parse_type_func() {
                 if (is_variadic) {
                     syntax_error("Ellipsis must be last parameter");
                 }
-                buf_push(args, parse_type());
+                buf_push(args, parse_type_func_param());
             }
         }
     }
@@ -494,7 +505,6 @@ Declaration* parse_declaration_var(SrcLocation location) {
         if (match_token(TOKEN_ASSIGN)) {
             expr = parse_expression();
         }
-        expect_token(TOKEN_SEMICOLON);
         return declaration_var(name, type, expr, location);
     } else {
         fatal_syntax("Expected : or = after var, got %s", token_str(token));

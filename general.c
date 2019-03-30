@@ -1,12 +1,16 @@
 Token token;
 const char *stream;
 const char *line_start;
+SrcLocation location_builtin = {.name = "<builtin>"};
 
 #define fatal_syntax(...) syntax_error(__VA_ARGS__); exit(-1);
 #define syntax_error(...) error(token.location, __VA_ARGS__);
 #define fatal_error(...) error(__VA_ARGS__); exit(-2);
 
 void error(SrcLocation location, const char* fmt, ...) {
+    if (location.name == NULL) {
+        location = location_builtin;
+    }
     va_list args;
     va_start(args, fmt);
     printf("%s (%d) ", location.name, location.line);

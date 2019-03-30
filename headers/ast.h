@@ -58,6 +58,7 @@ typedef union Value {
     unsigned long ul;
     long long ll;
     unsigned long long ull;
+    uintptr_t p;
 } Value;
 
 typedef struct Entity {

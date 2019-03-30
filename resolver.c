@@ -1,3 +1,5 @@
+#include <ast.h>
+
 Type *type_void = &(Type){TYPE_VOID, 0};
 Type *type_char = &(Type){TYPE_CHAR, 1, 1};
 Type *type_schar = &(Type){TYPE_SCHAR, 1, 1};
@@ -61,6 +63,24 @@ bool is_scalar_type(Type *type) {
     return TYPE_CHAR <= type->kind && type->kind <= TYPE_FUNC;
 }
 
+bool is_null_pointer(ResolvedExpression operand);
+
+bool is_convertible(Type *dest, Type *src) {
+    if (dest == src) {
+        return true;
+    } else if (dest->kind == TYPE_POINTER && src->kind == TYPE_POINTER) {
+        return dest->pointer.base == type_void || src->pointer.base == type_void;
+    } else if (is_math_type(dest) && is_math_type(src)) {
+        return true;
+    } else if (is_math_type(dest)) {
+        return src->kind == TYPE_POINTER;
+    } else if (is_math_type(src)) {
+        return dest->kind == TYPE_POINTER;
+    }
+
+    return false;
+}
+
 #define CASE(k, t) \
     case k: \
         switch (type->kind) { \
@@ -100,6 +120,13 @@ bool is_scalar_type(Type *type) {
             case TYPE_ULLONG: \
                 operand->val.ull = (unsigned long long)operand->val.t; \
                 break; \
+            case TYPE_POINTER: \
+                if (operand->type->kind == TYPE_POINTER || is_null_pointer(*operand)) { \
+                    operand->val.p = (uintptr_t)operand->val.t; \
+                } else { \
+                    operand->is_const = false; \
+                } \
+                break; \
             case TYPE_FLOAT: \
             case TYPE_DOUBLE: \
                 break; \
@@ -113,11 +140,14 @@ bool convert_expression(ResolvedExpression *operand, Type *type) {
     if (operand->type == type) {
         return true;
     }
-    if (!(is_math_type(operand->type) && is_math_type(type)) &&
-            !(type->kind == TYPE_POINTER && type->pointer.base == type_void) &&
-            !(operand->type->kind == TYPE_POINTER && operand->type->pointer.base == type_void && type->kind == TYPE_POINTER)) {
+    if (!is_convertible(operand->type, type)) {
         return false;
     }
+
+    if (type->kind == TYPE_POINTER && is_math_type(operand->type) && !is_null_pointer(*operand)) {
+        return false;
+    }
+
     if (operand->is_const) {
         if (is_floating_type(operand->type)) {
             operand->is_const = !is_integer_type(type);
@@ -135,6 +165,7 @@ bool convert_expression(ResolvedExpression *operand, Type *type) {
                 CASE(TYPE_ULONG, ul)
                 CASE(TYPE_LLONG, ll)
                 CASE(TYPE_ULLONG, ull)
+                CASE(TYPE_POINTER, p)
                 default:
                     operand->is_const = false;
                     break;
@@ -151,6 +182,15 @@ Value convert_const_expression(Type *src, Type *dest, Value val) {
     ResolvedExpression operand = resolved_const(src, val);
     convert_expression(&operand, dest);
     return operand.val;
+}
+
+bool is_null_pointer(ResolvedExpression operand) {
+    if (operand.is_const && (operand.type->kind == TYPE_POINTER || is_math_type(operand.type))) {
+        convert_expression(&operand, type_ullong);
+        return operand.val.ull == 0;
+    } else {
+        return false;
+    }
 }
 
 void promote_expression(ResolvedExpression *operand) {
@@ -346,7 +386,7 @@ Entity **entities_ordered;
 
 void global_entities_put(Entity *entity) {
     if (map_get(&global_entities, (void*)entity->name)) {
-        SrcLocation location = entity->decl ? entity->decl->location : (SrcLocation){0};
+        SrcLocation location = entity->decl ? entity->decl->location : location_builtin;
         fatal_error(location, "Duplicate definition");
     }
     map_put(&global_entities, (void*)entity->name, entity);
@@ -543,6 +583,14 @@ void entity_append_const(const char *name, Type *type, Value val) {
     entity->state = ENTITY_RESOLVED;
     entity->type = type;
     entity->val = val;
+    global_entities_put(entity);
+}
+
+void entity_append_typedef(const char *name, Type *type) {
+    Entity *entity = entity_new(ENTITY_TYPE, str_intern(name), declaration_typedef(name, typespec_name(name,
+            location_builtin), location_builtin));
+    entity->state = ENTITY_RESOLVED;
+    entity->type = type;
     global_entities_put(entity);
 }
 
@@ -957,6 +1005,9 @@ ResolvedExpression resolve_expression_binary(Expression *expr) {
                 if (left.type->pointer.base != right.type->pointer.base) {
                     fatal_error(expr->location, "Can't compare different pointer")
                 }
+                return resolved_rvalue(type_int);
+            } else if ((is_null_pointer(left) && right.type->kind == TYPE_POINTER) ||
+                            (is_null_pointer(right) && left.type->kind == TYPE_POINTER)) {
                 return resolved_rvalue(type_int);
             } else {
                 fatal_error(expr->location, "Invalid types of operands of %s", token_kind_names[expr->binary.op]);
@@ -1571,8 +1622,18 @@ void init_entities() {
     entity_append_type("ullong", type_ullong);
     entity_append_type("float", type_float);
 
+    entity_append_typedef("int8", type_schar);
+    entity_append_typedef("uint8", type_uchar);
+    entity_append_typedef("int16", type_short);
+    entity_append_typedef("uint16", type_ushort);
+    entity_append_typedef("int32", type_int);
+    entity_append_typedef("uint32", type_uint);
+    entity_append_typedef("int64", type_llong);
+    entity_append_typedef("uint64", type_ullong);
+
     entity_append_const("true", type_bool, (Value) {.b = true});
     entity_append_const("false", type_bool, (Value) {.b = false});
+    entity_append_const("NULL", type_pointer(type_void), (Value) {.p = 0});
 }
 
 void entities_append_declaration_list(DeclarationList *decl_list) {

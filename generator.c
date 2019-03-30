@@ -11,7 +11,15 @@ const char *gen_init = "#include <stdio.h>\n"
                        "typedef unsigned int uint;\n"
                        "typedef unsigned long ulong;\n"
                        "typedef long long llong;\n"
-                       "typedef unsigned long long ullong;\n";
+                       "typedef unsigned long long ullong;\n"
+                       "typedef char int8;\n"
+                       "typedef uchar uint8;\n"
+                       "typedef short int16;\n"
+                       "typedef ushort uint16;\n"
+                       "typedef int int32;\n"
+                       "typedef uint uint32;\n"
+                       "typedef llong int64;\n"
+                       "typedef ullong uint64;\n";
 
 #define genf(...) buf_printf(gen_buf, __VA_ARGS__)
 void genln() {
