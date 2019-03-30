@@ -18,6 +18,7 @@ struct {
     const char *return_keyword;
     const char *continue_keyword;
     const char *enum_keyword;
+    const char *foreign;
 } keywords;
 
 const char **keywords_buf;
@@ -49,6 +50,8 @@ void keywords_init() {
 
     start_keywords = keywords.func_keyword;
     end_keywords = keywords.enum_keyword;
+
+    keywords.foreign = str_intern("foreign");
 }
 
 #undef INIT_KEYWORD
@@ -109,6 +112,7 @@ const char *token_kind_names[] = {
         [TOKEN_COMMA] = ",",
         [TOKEN_SEMICOLON] = ";",
         [TOKEN_QUESTION_MARK] = "?",
+        [TOKEN_AT] = "@",
         [TOKEN_ELLIPSIS] = "...",
 };
 
@@ -215,7 +219,7 @@ void parse_float() {
 
     double val = strtod(start, NULL);
 
-    if (val == HUGE_VAL || val == -HUGE_VAL) {
+    if (val == HUGE_VALF) {
         syntax_error("Float literal overflow");
     }
 
@@ -435,6 +439,7 @@ void next_token() {
         CASE1('[', TOKEN_LBRACKET)
         CASE1(']', TOKEN_RBRACKET)
         CASE1(',', TOKEN_COMMA)
+        CASE1('@', TOKEN_AT)
         CASE1(';', TOKEN_SEMICOLON)
         CASE1('?', TOKEN_QUESTION_MARK)
         CASE1('~', TOKEN_BIN_NOT)

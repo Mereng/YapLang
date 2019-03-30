@@ -550,6 +550,14 @@ Declaration* parse_declaration_func(SrcLocation location) {
     return declaration_func(name, ast_dup(params, buf_sizeof(params)), buf_len(params), ret, is_variadic, block, location);
 }
 
+AttributeList parse_attribute_list() {
+    Attribute *attrs = NULL;
+    while (match_token(TOKEN_AT)) {
+        buf_push(attrs, ((Attribute){.location = token.location, .name = parse_name()}));
+    }
+    return (AttributeList){ast_dup(attrs, buf_sizeof(attrs)), buf_len(attrs)};
+}
+
 Declaration* try_parse_declaration() {
     if (match_keyword(keywords.enum_keyword)) {
         return parse_declaration_enum();
@@ -571,11 +579,12 @@ Declaration* try_parse_declaration() {
 }
 
 Declaration* parse_declaration() {
+    AttributeList attrs = parse_attribute_list();
     Declaration *decl = try_parse_declaration();
     if (!decl) {
         fatal_syntax("Expected declaration keyword, got %s ", token_str(token));
     }
-
+    decl->attributes = attrs;
     return decl;
 }
 

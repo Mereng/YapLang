@@ -1,5 +1,3 @@
-#include <ast.h>
-
 Type *type_void = &(Type){TYPE_VOID, 0};
 Type *type_char = &(Type){TYPE_CHAR, 1, 1};
 Type *type_schar = &(Type){TYPE_SCHAR, 1, 1};
@@ -15,7 +13,8 @@ Type *type_ullong = &(Type){TYPE_ULONG, 8, 8};
 Type *type_float = &(Type){TYPE_FLOAT, 4, 4};
 Type *type_double = &(Type){TYPE_DOUBLE, 8, 8};
 
-#define type_size type_ullong
+#define type_usize type_ullong
+#define type_size type_llong
 
 typedef struct ResolvedExpression {
     Type *type;
@@ -243,6 +242,10 @@ bool is_integer_type(Type *type) {
 
 bool is_math_type(Type *type) {
     return TYPE_CHAR <= type->kind && type->kind <= TYPE_DOUBLE;
+}
+
+bool is_scalar_type(Type *type) {
+    return TYPE_CHAR <= type->kind && type->kind <= TYPE_FUNC;
 }
 
 bool issigned(Type *type) {
@@ -560,50 +563,65 @@ Type* unify_math_type(Type *left, Type *right) {
 
 Value eval_unary(TokenKind op, Type *type, Value value) {
     ResolvedExpression operand = resolved_const(type, value);
-    if (issigned(type)) {
-        convert_expression(&operand, type_llong);
-        long long x = operand.val.ll;
-        long long res;
-        switch (op) {
-            case TOKEN_ADD:
-                res = +x;
-                break;
-            case TOKEN_SUB:
-                res = -x;
-                break;
-            case TOKEN_BIN_NOT:
-                res = ~x;
-                break;
-            case TOKEN_NOT:
-                res = !x;
-                break;
-            default:
-                assert(0);
-                break;
+    if (is_integer_type(type)) {
+        if (issigned(type)) {
+            convert_expression(&operand, type_llong);
+            long long x = operand.val.ll;
+            long long res;
+            switch (op) {
+                case TOKEN_ADD:
+                    res = +x;
+                    break;
+                case TOKEN_SUB:
+                    res = -x;
+                    break;
+                case TOKEN_BIN_NOT:
+                    res = ~x;
+                    break;
+                case TOKEN_NOT:
+                    res = !x;
+                    break;
+                default:
+                    assert(0);
+                    break;
+            }
+            operand.val.ll = res;
+        } else {
+            convert_expression(&operand, type_ullong);
+            unsigned long long x = operand.val.ull;
+            unsigned long long res;
+            switch (op) {
+                case TOKEN_ADD:
+                    res = +x;
+                    break;
+                case TOKEN_SUB:
+                    res = x;
+                    break;
+                case TOKEN_BIN_NOT:
+                    res = ~x;
+                    break;
+                case TOKEN_NOT:
+                    res = (unsigned) (!x);
+                    break;
+                default:
+                    assert(0);
+                    break;
+            }
+            operand.val.ull = res;
         }
-        operand.val.ll = res;
     } else {
-        convert_expression(&operand, type_ullong);
-        unsigned long long x = operand.val.ull;
-        unsigned long long res;
+        convert_expression(&operand, type_double);
         switch (op) {
             case TOKEN_ADD:
-                res = +x;
+                operand.val.d = +operand.val.d;
                 break;
             case TOKEN_SUB:
-                res = x;
-                break;
-            case TOKEN_BIN_NOT:
-                res = ~x;
-                break;
-            case TOKEN_NOT:
-                res = (unsigned)(!x);
+                operand.val.d = -operand.val.d;
                 break;
             default:
                 assert(0);
                 break;
         }
-        operand.val.ull = res;
     }
 
     convert_expression(&operand, type);
@@ -615,96 +633,152 @@ Value eval_binary(TokenKind op, Type *type, Value left, Value right) {
     ResolvedExpression right_op = resolved_const(type, right);
     ResolvedExpression result;
 
-    if (issigned(type)) {
-        convert_expression(&left_op, type_llong);
-        convert_expression(&right_op, type_llong);
-        long long x = left_op.val.ll;
-        long long y = right_op.val.ll;
-        long long res;
-        switch (op) {
-            case TOKEN_MUL:
-                res = x * y;
-                break;
-            case TOKEN_DIV:
-                res = y != 0 ? x / y : 0;
-                break;
-            case TOKEN_MOD:
-                res = y != 0 ? x % y : 0;
-                break;
-            case TOKEN_BIN_AND:
-                res = x & y;
-                break;
-            case TOKEN_LSHIFT:
-                res = x << y;
-                break;
-            case TOKEN_RSHIFT:
-                res = x >> y;
-                break;
-            case TOKEN_ADD:
-                res = x + y;
-                break;
-            case TOKEN_SUB:
-                res = x - y;
-                break;
-            case TOKEN_BIN_OR:
-                res = x | y;
-                break;
-            case TOKEN_XOR:
-                res = x ^ y;
-                break;
-            case TOKEN_EQ:
-                res = x && y;
-                break;
-            case TOKEN_NOTEQ:
-                res = x != y;
-                break;
-            case TOKEN_LT:
-                res = x < y;
-                break;
-            case TOKEN_LTEQ:
-                res = x <= y;
-                break;
-            case TOKEN_GT:
-                res = x > y;
-                break;
-            case TOKEN_GTEQ:
-                res = x >= y;
-                break;
-            case TOKEN_AND:
-                res = x && y;
-                break;
-            case TOKEN_OR:
-                res = x || y;
-                break;
-            default:
-                assert(0);
-                break;
+    if (is_integer_type(type)) {
+        if (issigned(type)) {
+            convert_expression(&left_op, type_llong);
+            convert_expression(&right_op, type_llong);
+            long long x = left_op.val.ll;
+            long long y = right_op.val.ll;
+            long long res;
+            switch (op) {
+                case TOKEN_MUL:
+                    res = x * y;
+                    break;
+                case TOKEN_DIV:
+                    res = y != 0 ? x / y : 0;
+                    break;
+                case TOKEN_MOD:
+                    res = y != 0 ? x % y : 0;
+                    break;
+                case TOKEN_BIN_AND:
+                    res = x & y;
+                    break;
+                case TOKEN_LSHIFT:
+                    res = x << y;
+                    break;
+                case TOKEN_RSHIFT:
+                    res = x >> y;
+                    break;
+                case TOKEN_ADD:
+                    res = x + y;
+                    break;
+                case TOKEN_SUB:
+                    res = x - y;
+                    break;
+                case TOKEN_BIN_OR:
+                    res = x | y;
+                    break;
+                case TOKEN_XOR:
+                    res = x ^ y;
+                    break;
+                case TOKEN_EQ:
+                    res = x && y;
+                    break;
+                case TOKEN_NOTEQ:
+                    res = x != y;
+                    break;
+                case TOKEN_LT:
+                    res = x < y;
+                    break;
+                case TOKEN_LTEQ:
+                    res = x <= y;
+                    break;
+                case TOKEN_GT:
+                    res = x > y;
+                    break;
+                case TOKEN_GTEQ:
+                    res = x >= y;
+                    break;
+                case TOKEN_AND:
+                    res = x && y;
+                    break;
+                case TOKEN_OR:
+                    res = x || y;
+                    break;
+                default:
+                    assert(0);
+                    break;
+            }
+            result = resolved_const(type_llong, (Value) {.ll = res});
+        } else {
+            convert_expression(&left_op, type_ullong);
+            convert_expression(&right_op, type_ullong);
+            unsigned long long x = left_op.val.ull;
+            unsigned long long y = right_op.val.ull;
+            unsigned long long res;
+            switch (op) {
+                case TOKEN_MUL:
+                    res = x * y;
+                    break;
+                case TOKEN_DIV:
+                    res = y != 0 ? x / y : 0;
+                    break;
+                case TOKEN_MOD:
+                    res = y != 0 ? x % y : 0;
+                    break;
+                case TOKEN_BIN_AND:
+                    res = x & y;
+                    break;
+                case TOKEN_LSHIFT:
+                    res = x << y;
+                    break;
+                case TOKEN_RSHIFT:
+                    res = x >> y;
+                    break;
+                case TOKEN_ADD:
+                    res = x + y;
+                    break;
+                case TOKEN_SUB:
+                    res = x - y;
+                    break;
+                case TOKEN_BIN_OR:
+                    res = x | y;
+                    break;
+                case TOKEN_XOR:
+                    res = x ^ y;
+                    break;
+                case TOKEN_EQ:
+                    res = (unsigned) (x && y);
+                    break;
+                case TOKEN_NOTEQ:
+                    res = (unsigned) (x != y);
+                    break;
+                case TOKEN_LT:
+                    res = (unsigned) (x < y);
+                    break;
+                case TOKEN_LTEQ:
+                    res = (unsigned) (x <= y);
+                    break;
+                case TOKEN_GT:
+                    res = (unsigned) (x > y);
+                    break;
+                case TOKEN_GTEQ:
+                    res = (unsigned) (x >= y);
+                    break;
+                case TOKEN_AND:
+                    res = (unsigned) (x && y);
+                    break;
+                case TOKEN_OR:
+                    res = (unsigned) (x || y);
+                    break;
+                default:
+                    assert(0);
+                    break;
+            }
+            result = resolved_const(type_llong, (Value) {.ull = res});
         }
-        result = resolved_const(type_llong, (Value){.ll = res});
     } else {
-        convert_expression(&left_op, type_ullong);
-        convert_expression(&right_op, type_ullong);
-        unsigned long long x = left_op.val.ull;
-        unsigned long long y = right_op.val.ull;
-        unsigned long long res;
+        convert_expression(&left_op, type_double);
+        convert_expression(&right_op, type_double);
+        double x = left_op.val.d;
+        double y = right_op.val.d;
+        double res;
         switch (op) {
             case TOKEN_MUL:
                 res = x * y;
                 break;
             case TOKEN_DIV:
-                res = y != 0 ? x / y : 0;
-                break;
-            case TOKEN_MOD:
-                res = y != 0 ? x % y : 0;
-                break;
-            case TOKEN_BIN_AND:
-                res = x & y;
-                break;
-            case TOKEN_LSHIFT:
-                res = x << y;
-                break;
-            case TOKEN_RSHIFT:
-                res = x >> y;
+                res = x / y;
                 break;
             case TOKEN_ADD:
                 res = x + y;
@@ -712,41 +786,11 @@ Value eval_binary(TokenKind op, Type *type, Value left, Value right) {
             case TOKEN_SUB:
                 res = x - y;
                 break;
-            case TOKEN_BIN_OR:
-                res = x | y;
-                break;
-            case TOKEN_XOR:
-                res = x ^ y;
-                break;
-            case TOKEN_EQ:
-                res = (unsigned)(x && y);
-                break;
-            case TOKEN_NOTEQ:
-                res = (unsigned)(x != y);
-                break;
-            case TOKEN_LT:
-                res = (unsigned)(x < y);
-                break;
-            case TOKEN_LTEQ:
-                res = (unsigned)(x <= y);
-                break;
-            case TOKEN_GT:
-                res = (unsigned)(x > y);
-                break;
-            case TOKEN_GTEQ:
-                res = (unsigned)(x >= y);
-                break;
-            case TOKEN_AND:
-                res = (unsigned)(x && y);
-                break;
-            case TOKEN_OR:
-                res = (unsigned)(x || y);
-                break;
             default:
                 assert(0);
                 break;
         }
-        result = resolved_const(type_llong, (Value){.ull = res});
+        result = resolved_const(type_double, (Value) {.d = res});
     }
     convert_expression(&result, type);
     return result.val;
@@ -782,6 +826,15 @@ ResolvedExpression resolve_expression_name(Expression *expr) {
     }
 }
 
+ResolvedExpression resolve_unary(TokenKind op, ResolvedExpression operand) {
+    promote_expression(&operand);
+    if (operand.is_const) {
+        return resolved_const(operand.type, eval_unary(op, operand.type, operand.val));
+    } else {
+        return operand;
+    }
+}
+
 ResolvedExpression resolve_expression_unary(Expression *expr) {
     ResolvedExpression operand = resolve_expression(expr->unary.operand);
     switch (expr->unary.op) {
@@ -796,30 +849,142 @@ ResolvedExpression resolve_expression_unary(Expression *expr) {
                 fatal_error(expr->location, "Can't take address of non-lvalue");
             }
             return (ResolvedExpression){type_pointer(operand.type)};
-        default:
+        case TOKEN_ADD:
+        case TOKEN_SUB:
+            if (!is_math_type(operand.type)) {
+                fatal_error(expr->location, "Can only use unary %s with mathematics type",
+                        token_kind_names[expr->unary.op]);
+            }
+            return resolve_unary(expr->unary.op, operand);
+        case TOKEN_BIN_NOT:
             if (!is_integer_type(operand.type)) {
-                fatal_error(expr->location, "%s is working yet for ints", token_kind_names[expr->unary.op]);
+                fatal_error(expr->location, "Can only use ~ with integer type");
             }
-            promote_expression(&operand);
-            if (operand.is_const) {
-                return resolved_const(operand.type, eval_unary(expr->unary.op, operand.type,  operand.val));
-            } else {
-                return operand;
-            }
+            return resolve_unary(expr->unary.op, operand);
+        default:
+            assert(0);
+            break;
     }
 
-    return (ResolvedExpression){operand.type->pointer.base};
+    return (ResolvedExpression){0};
+}
+
+ResolvedExpression resolve_binary(TokenKind op, ResolvedExpression left, ResolvedExpression right) {
+    if (left.is_const && right.is_const) {
+        return resolved_const(left.type, eval_binary(op, left.type, left.val, right.val));
+    } else {
+        return resolved_rvalue(left.type);
+    }
+}
+
+ResolvedExpression resolve_binary_math(TokenKind op, ResolvedExpression left, ResolvedExpression right) {
+    unify_math_expressions(&left, &right);
+    return resolve_binary(op, left, right);
 }
 
 ResolvedExpression resolve_expression_binary(Expression *expr) {
     ResolvedExpression left = resolve_expression(expr->binary.left);
     ResolvedExpression right = resolve_expression(expr->binary.right);
-    unify_math_expressions(&left, &right);
-    if (left.is_const && right.is_const) {
-        return resolved_const(left.type, eval_binary(expr->binary.op, left.type, left.val, right.val));
-    } else {
-        return resolved_rvalue(left.type);
+    switch (expr->binary.op) {
+        case TOKEN_MUL:
+        case TOKEN_DIV:
+            if (!is_math_type(left.type)) {
+                fatal_error(expr->location, "Left operand of %s must have mathematics type",
+                        token_kind_names[expr->binary.op]);
+            }
+            if (!is_math_type(right.type)) {
+                fatal_error(expr->location, "Right operand of %s must have mathematics type",
+                            token_kind_names[expr->binary.op]);
+            }
+            return resolve_binary_math(expr->binary.op, left, right);
+        case TOKEN_MOD:
+            if (!is_integer_type(left.type)) {
+                fatal_error(expr->binary.left->location, "Left operand of %% must have integer type");
+            }
+            if (!is_integer_type(right.type)) {
+                fatal_error(expr->binary.right->location, "Right operand of %% must have integer type");
+            }
+            return resolve_binary_math(expr->binary.op, left, right);
+        case TOKEN_ADD:
+            if (is_math_type(left.type) && is_math_type(right.type)) {
+                return resolve_binary_math(expr->binary.op, left, right);
+            } else if (left.type->kind == TYPE_POINTER && is_integer_type(right.type)) {
+                return resolved_rvalue(left.type);
+            } else if (right.type->kind == TYPE_POINTER && is_integer_type(left.type)) {
+                return resolved_rvalue(right.type);
+            } else {
+                fatal_error(expr->location, "Invalid types of operands of +");
+            }
+        case TOKEN_SUB:
+            if (is_math_type(left.type) && is_math_type(right.type)) {
+                return resolve_binary_math(expr->binary.op, left, right);
+            } else if (left.type->kind == TYPE_POINTER && is_integer_type(right.type)) {
+                return resolved_rvalue(left.type);
+            } else if (left.type->kind == TYPE_POINTER && right.type->kind == TYPE_POINTER) {
+                if (left.type->pointer.base != right.type->pointer.base) {
+                    fatal_error(expr->location, "Can't subtract different pointers");
+                }
+                return resolved_rvalue(type_size);
+            } else {
+                fatal_error(expr->location, "Invalid types of operands of -");
+            }
+        case TOKEN_LSHIFT:
+        case TOKEN_RSHIFT:
+            if (is_integer_type(left.type) && is_integer_type(right.type)) {
+                promote_expression(&left);
+                promote_expression(&right);
+                if (issigned(left.type)) {
+                    convert_expression(&left, type_llong);
+                    convert_expression(&right, type_llong);
+                } else {
+                    convert_expression(&left, type_ullong);
+                    convert_expression(&right, type_ullong);
+                }
+                ResolvedExpression result = resolve_binary(expr->binary.op, left, right);
+                convert_expression(&result, left.type);
+                return result;
+            } else  {
+                fatal_error(expr->location, "Invalid types of operands of %s", token_kind_names[expr->binary.op]);
+            }
+        case TOKEN_LT:
+        case TOKEN_LTEQ:
+        case TOKEN_GT:
+        case TOKEN_GTEQ:
+        case TOKEN_EQ:
+        case TOKEN_NOTEQ:
+            if (is_math_type(left.type) && is_math_type(right.type)) {
+                ResolvedExpression result = resolve_binary_math(expr->binary.op, left, right);
+                convert_expression(&result, type_int);
+                return result;
+            } else if (left.type->kind == TYPE_POINTER && right.type->kind == TYPE_POINTER) {
+                if (left.type->pointer.base != right.type->pointer.base) {
+                    fatal_error(expr->location, "Can't compare different pointer")
+                }
+                return resolved_rvalue(type_int);
+            } else {
+                fatal_error(expr->location, "Invalid types of operands of %s", token_kind_names[expr->binary.op]);
+            }
+        case TOKEN_AND:
+        case TOKEN_OR:
+            if (is_scalar_type(left.type) && is_scalar_type(right.type)) {
+                return resolved_rvalue(type_int);
+            } else {
+                fatal_error(expr->location, "Invalid types of operands of %s", token_kind_names[expr->binary.op]);
+            }
+        case TOKEN_BIN_AND:
+        case TOKEN_BIN_OR:
+        case TOKEN_XOR:
+            if (is_integer_type(left.type) && is_integer_type(right.type)) {
+                return resolve_binary_math(expr->binary.op, left, right);
+            } else {
+                fatal_error(expr->location, "Invalid types of operands of %s", token_kind_names[expr->binary.op]);
+            }
+        default:
+            assert(0);
+            break;
     }
+
+    return (ResolvedExpression){0};
 }
 
 ResolvedExpression resolve_expression_field(Expression *expr) {
@@ -964,21 +1129,23 @@ ResolvedExpression resolve_expression_call(Expression *expr) {
 
 ResolvedExpression resolve_expression_ternary(Expression *expr, Type *expected_type) {
     ResolvedExpression cond = pointer_decay(resolve_expression(expr->ternary.cond));
-    if (cond.type->kind != TYPE_INT && cond.type->kind != TYPE_POINTER) {
-        fatal_error(expr->location, "Condition expression of ternary operator ? must have typespec int or ptr");
+    if (!is_scalar_type(cond.type)) {
+        fatal_error(expr->location, "Condition expression of ternary operator ? must have scalar type");
     }
 
-    ResolvedExpression then_ex = resolve_expression_expected_type(expr->ternary.then_ex, expected_type);
-    ResolvedExpression else_ex = resolve_expression_expected_type(expr->ternary.else_ex, expected_type);
-
-    if (then_ex.type != else_ex.type) {
-        fatal_error(expr->location, "Then and else expression of ternary operator ? must have matching types");
-    }
-
-    if (cond.is_const && then_ex.is_const && else_ex.is_const) {
-        return resolved_const(then_ex.type, cond.val.i ? then_ex.val : else_ex.val);
-    } else {
+    ResolvedExpression then_ex = pointer_decay(resolve_expression_expected_type(expr->ternary.then_ex, expected_type));
+    ResolvedExpression else_ex = pointer_decay(resolve_expression_expected_type(expr->ternary.else_ex, expected_type));
+    if (is_math_type(then_ex.type) && is_math_type(else_ex.type)) {
+        unify_math_expressions(&then_ex, &else_ex);
+        if (cond.is_const && then_ex.is_const && else_ex.is_const) {
+            return resolved_const(then_ex.type, cond.val.i ? then_ex.val : else_ex.val);
+        } else {
+            return resolved_rvalue(then_ex.type);
+        }
+    } else if (then_ex.type == else_ex.type) {
         return resolved_rvalue(then_ex.type);
+    } else {
+        fatal_error(expr->location, "Ivalid types of operands of ?");
     }
 }
 
@@ -1011,7 +1178,7 @@ ResolvedExpression resolve_expression_expected_type(Expression *expr, Type *expe
             resolved = resolved_const(type_int, (Value){.i = expr->int_val});
             break;
         case EXPR_FLOAT:
-            resolved = resolved_rvalue(type_float);
+            resolved = resolved_const(type_float, (Value) {.f = (float)expr->float_val});
             break;
         case EXPR_STR:
             resolved = resolved_rvalue(type_pointer(type_char));
@@ -1029,13 +1196,13 @@ ResolvedExpression resolve_expression_expected_type(Expression *expr, Type *expe
             ResolvedExpression result = resolve_expression(expr->size_of_expr);
             Type *type = result.type;
             complete_type(type);
-            resolved = resolved_const(type_size, (Value){.ull = type->size});
+            resolved = resolved_const(type_usize, (Value){.ull = type->size});
             break;
         }
         case EXPR_SIZEOF_TYPE: {
             Type *type = resolve_typespec(expr->size_of_type);
             complete_type(type);
-            resolved = resolved_const(type_size, (Value){.ull = type->size});
+            resolved = resolved_const(type_usize, (Value){.ull = type->size});
             break;
         }
         case EXPR_FIELD:
@@ -1263,9 +1430,9 @@ Type* resolve_declaration_var(Declaration *decl) {
 }
 
 Type* resolve_declaration_const(Declaration *decl, Value *val) {
-    ResolvedExpression result = resolve_expression(decl->const_decl.expr);
-    if (!result.is_const) {
-        fatal_error(decl->location, "Initial value for const is not a constant");
+    ResolvedExpression result = resolve_const_expression(decl->const_decl.expr);
+    if (!is_math_type(result.type)) {
+        fatal_error(decl->location, "Const must have mathematics type");
     }
     *val = result.val;
     return result.type;
@@ -1367,10 +1534,6 @@ void init_entities() {
     entity_append_type("llong", type_llong);
     entity_append_type("ullong", type_ullong);
     entity_append_type("float", type_float);
-
-    entity_append_func("puts", type_func((Type*[]){type_pointer(type_char)}, 1, type_int, false));
-    entity_append_func("printf", type_func((Type*[]){type_pointer(type_char)}, 1, type_int, true));
-    entity_append_func("getchar", type_func(NULL, 0, type_int, false));
 }
 
 void entities_append_declaration_list(DeclarationList *decl_list) {

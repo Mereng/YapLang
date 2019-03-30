@@ -94,11 +94,11 @@ typedef enum TypeKind {
     TYPE_ULLONG,
     TYPE_FLOAT,
     TYPE_DOUBLE,
+    TYPE_POINTER,
+    TYPE_FUNC,
     TYPE_STRUCT,
     TYPE_UNION,
     TYPE_ARRAY,
-    TYPE_POINTER,
-    TYPE_FUNC,
     TYPE_INCOMPLETE,
     TYPE_COMPLETING,
     TYPE_MAX
@@ -132,6 +132,18 @@ struct Type {
 };
 
 Type *type_new(TypeKind kind);
+
+typedef struct Attribute {
+    const char *name;
+    SrcLocation location;
+} Attribute;
+
+typedef struct AttributeList {
+    Attribute *attributes;
+    size_t num_attributes;
+} AttributeList;
+
+
 
 enum TypespecKind {
     TYPESPEC_NONE,
@@ -210,6 +222,7 @@ struct Declaration {
     DeclarationKind kind;
     Entity *entity;
     const char *name;
+    AttributeList attributes;
     union {
         struct {
             EnumItem *items;
@@ -251,6 +264,7 @@ Declaration* declaration_const(const char *name, Expression *expr, SrcLocation l
 Declaration* declaration_func(const char *name, FuncParam *params, size_t num_params, Typespec *ret_type,
                               bool is_variadic, StatementBlock body, SrcLocation loc);
 Declaration* declaration_typedef(const char *name, Typespec *type, SrcLocation loc);
+Attribute* get_declaration_attribute(Declaration *declaration, const char *name);
 
 struct DeclarationList {
     Declaration **declarations;

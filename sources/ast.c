@@ -119,6 +119,15 @@ Declaration* declaration_typedef(const char *name, Typespec *type, SrcLocation l
     decl->typedef_decl.type = type;
     return decl;
 }
+Attribute* get_declaration_attribute(Declaration *declaration, const char *name) {
+    for (size_t i = 0; i < declaration->attributes.num_attributes; i++) {
+        Attribute *attr = declaration->attributes.attributes + i;
+        if (attr->name == name) {
+            return attr;
+        }
+    }
+    return NULL;
+}
 
 DeclarationList *declaration_list_new(Declaration **declarations, size_t num) {
     DeclarationList *decl_list = ast_alloc(sizeof(DeclarationList));
