@@ -2,6 +2,7 @@ Type *type_void = &(Type){TYPE_VOID, 0};
 Type *type_char = &(Type){TYPE_CHAR, 1, 1};
 Type *type_schar = &(Type){TYPE_SCHAR, 1, 1};
 Type *type_uchar = &(Type){TYPE_UCHAR, 1, 1};
+Type *type_bool = &(Type){TYPE_BOOL, 1, 1};
 Type *type_short = &(Type){TYPE_SHORT, 2, 2};
 Type *type_ushort = &(Type){TYPE_USHORT, 2, 2};
 Type *type_int = &(Type){TYPE_INT, 4, 4};
@@ -44,6 +45,22 @@ ResolvedExpression resolved_const(Type *type, Value val) {
     };
 }
 
+bool is_integer_type(Type *type) {
+    return TYPE_CHAR <= type->kind && type->kind <= TYPE_ULLONG;
+}
+
+bool is_floating_type(Type *type) {
+    return TYPE_FLOAT <= type->kind && type->kind <= TYPE_DOUBLE;
+}
+
+bool is_math_type(Type *type) {
+    return TYPE_CHAR <= type->kind && type->kind <= TYPE_DOUBLE;
+}
+
+bool is_scalar_type(Type *type) {
+    return TYPE_CHAR <= type->kind && type->kind <= TYPE_FUNC;
+}
+
 #define CASE(k, t) \
     case k: \
         switch (type->kind) { \
@@ -55,6 +72,9 @@ ResolvedExpression resolved_const(Type *type, Value val) {
                 break; \
             case TYPE_UCHAR: \
                 operand->val.uc = (unsigned char)operand->val.t; \
+                break; \
+            case TYPE_BOOL: \
+                operand->val.b = operand->val.t != 0; \
                 break; \
             case TYPE_SHORT:\
                 operand->val.s = (short)operand->val.t; \
@@ -81,18 +101,13 @@ ResolvedExpression resolved_const(Type *type, Value val) {
                 operand->val.ull = (unsigned long long)operand->val.t; \
                 break; \
             case TYPE_FLOAT: \
-                operand->val.f = (float)operand->val.t; \
-                break; \
             case TYPE_DOUBLE: \
-                operand->val.d = (double)operand->val.t; \
                 break; \
             default: \
                 operand->is_const = false; \
                 break; \
         } \
         break;
-
-bool is_math_type(Type *type);
 
 bool convert_expression(ResolvedExpression *operand, Type *type) {
     if (operand->type == type) {
@@ -104,23 +119,26 @@ bool convert_expression(ResolvedExpression *operand, Type *type) {
         return false;
     }
     if (operand->is_const) {
-        switch (operand->type->kind) {
-            CASE(TYPE_CHAR, c)
-            CASE(TYPE_SCHAR, sc)
-            CASE(TYPE_UCHAR, uc)
-            CASE(TYPE_SHORT, s)
-            CASE(TYPE_USHORT, us)
-            CASE(TYPE_INT, i)
-            CASE(TYPE_UINT, ui)
-            CASE(TYPE_LONG, l)
-            CASE(TYPE_ULONG, ul)
-            CASE(TYPE_LLONG, ll)
-            CASE(TYPE_ULLONG, ull)
-            CASE(TYPE_FLOAT, f)
-            CASE(TYPE_DOUBLE, d)
-            default:
-                operand->is_const = false;
-                break;
+        if (is_floating_type(operand->type)) {
+            operand->is_const = !is_integer_type(type);
+        } else {
+            switch (operand->type->kind) {
+                CASE(TYPE_BOOL, b)
+                CASE(TYPE_CHAR, c)
+                CASE(TYPE_SCHAR, sc)
+                CASE(TYPE_UCHAR, uc)
+                CASE(TYPE_SHORT, s)
+                CASE(TYPE_USHORT, us)
+                CASE(TYPE_INT, i)
+                CASE(TYPE_UINT, ui)
+                CASE(TYPE_LONG, l)
+                CASE(TYPE_ULONG, ul)
+                CASE(TYPE_LLONG, ll)
+                CASE(TYPE_ULLONG, ull)
+                default:
+                    operand->is_const = false;
+                    break;
+            }
         }
     }
     operand->type = type;
@@ -236,18 +254,6 @@ Type* type_incomplete(Entity *entity) {
     return type;
 }
 
-bool is_integer_type(Type *type) {
-    return TYPE_CHAR <= type->kind && type->kind <= TYPE_ULLONG;
-}
-
-bool is_math_type(Type *type) {
-    return TYPE_CHAR <= type->kind && type->kind <= TYPE_DOUBLE;
-}
-
-bool is_scalar_type(Type *type) {
-    return TYPE_CHAR <= type->kind && type->kind <= TYPE_FUNC;
-}
-
 bool issigned(Type *type) {
     switch (type->kind) {
         case TYPE_SCHAR:
@@ -266,6 +272,7 @@ const char *type_names[TYPE_MAX] = {
     [TYPE_CHAR] = "char",
     [TYPE_SCHAR] = "schar",
     [TYPE_UCHAR] = "uchar",
+    [TYPE_BOOL] = "bool",
     [TYPE_SHORT] = "short",
     [TYPE_USHORT] = "ushort",
     [TYPE_INT] = "int",
@@ -279,17 +286,18 @@ const char *type_names[TYPE_MAX] = {
 };
 
 int type_ranks[TYPE_MAX] = {
-    [TYPE_CHAR] = 1,
-    [TYPE_SCHAR] = 1,
-    [TYPE_UCHAR] = 1,
-    [TYPE_SHORT] = 2,
-    [TYPE_USHORT] = 2,
-    [TYPE_INT] = 3,
-    [TYPE_UINT] = 3,
-    [TYPE_LONG] = 4,
-    [TYPE_ULONG] = 4,
-    [TYPE_LLONG] = 5,
-    [TYPE_ULLONG] = 5
+    [TYPE_BOOL] = 1,
+    [TYPE_CHAR] = 2,
+    [TYPE_SCHAR] = 2,
+    [TYPE_UCHAR] = 2,
+    [TYPE_SHORT] = 3,
+    [TYPE_USHORT] = 3,
+    [TYPE_INT] = 4,
+    [TYPE_UINT] = 4,
+    [TYPE_LONG] = 5,
+    [TYPE_ULONG] = 5,
+    [TYPE_LLONG] = 6,
+    [TYPE_ULLONG] = 6
 };
 
 int type_rank(Type *type) {
@@ -302,6 +310,8 @@ Type* unsigned_type(Type *type) {
         case TYPE_SCHAR:
         case TYPE_UCHAR:
             return type_uchar;
+        case TYPE_BOOL:
+            return type_bool;
         case TYPE_SHORT:
         case TYPE_USHORT:
             return type_ushort;
@@ -515,6 +525,14 @@ void entity_append_func(const char *name, Type *type) {
     global_entities_put(entity);
 }
 
+void entity_append_const(const char *name, Type *type, Value val) {
+    Entity *entity = entity_new(ENTITY_CONST, str_intern(name), NULL);
+    entity->state = ENTITY_RESOLVED;
+    entity->type = type;
+    entity->val = val;
+    global_entities_put(entity);
+}
+
 void unify_math_expressions(ResolvedExpression *left, ResolvedExpression *right) {
     if (left->type == type_double) {
         convert_expression(right, type_double);
@@ -562,8 +580,8 @@ Type* unify_math_type(Type *left, Type *right) {
 }
 
 Value eval_unary(TokenKind op, Type *type, Value value) {
-    ResolvedExpression operand = resolved_const(type, value);
     if (is_integer_type(type)) {
+        ResolvedExpression operand = resolved_const(type, value);
         if (issigned(type)) {
             convert_expression(&operand, type_llong);
             long long x = operand.val.ll;
@@ -609,31 +627,18 @@ Value eval_unary(TokenKind op, Type *type, Value value) {
             }
             operand.val.ull = res;
         }
+        convert_expression(&operand, type);
+        return operand.val;
     } else {
-        convert_expression(&operand, type_double);
-        switch (op) {
-            case TOKEN_ADD:
-                operand.val.d = +operand.val.d;
-                break;
-            case TOKEN_SUB:
-                operand.val.d = -operand.val.d;
-                break;
-            default:
-                assert(0);
-                break;
-        }
+        return (Value){0};
     }
-
-    convert_expression(&operand, type);
-    return operand.val;
 }
 
 Value eval_binary(TokenKind op, Type *type, Value left, Value right) {
-    ResolvedExpression left_op = resolved_const(type, left);
-    ResolvedExpression right_op = resolved_const(type, right);
-    ResolvedExpression result;
-
     if (is_integer_type(type)) {
+        ResolvedExpression left_op = resolved_const(type, left);
+        ResolvedExpression right_op = resolved_const(type, right);
+        ResolvedExpression result;
         if (issigned(type)) {
             convert_expression(&left_op, type_llong);
             convert_expression(&right_op, type_llong);
@@ -767,40 +772,19 @@ Value eval_binary(TokenKind op, Type *type, Value left, Value right) {
             }
             result = resolved_const(type_llong, (Value) {.ull = res});
         }
+        convert_expression(&result, type);
+        return result.val;
     } else {
-        convert_expression(&left_op, type_double);
-        convert_expression(&right_op, type_double);
-        double x = left_op.val.d;
-        double y = right_op.val.d;
-        double res;
-        switch (op) {
-            case TOKEN_MUL:
-                res = x * y;
-                break;
-            case TOKEN_DIV:
-                res = x / y;
-                break;
-            case TOKEN_ADD:
-                res = x + y;
-                break;
-            case TOKEN_SUB:
-                res = x - y;
-                break;
-            default:
-                assert(0);
-                break;
-        }
-        result = resolved_const(type_double, (Value) {.d = res});
+        return (Value){0};
     }
-    convert_expression(&result, type);
-    return result.val;
 }
 
 Entity* resolve_entity_name(const char *name);
 ResolvedExpression resolve_expression_expected_type(Expression *expr, Type *expected_type);
 ResolvedExpression resolve_expression(Expression *expr);
 ResolvedExpression resolve_const_expression(Expression *expr);
-void resolve_statement(Statement *stmt, Type *ret_type);
+
+bool resolve_statement(Statement *stmt, Type *ret_type);
 
 ResolvedExpression pointer_decay(ResolvedExpression expr) {
     if (expr.type->kind == TYPE_ARRAY) {
@@ -990,6 +974,9 @@ ResolvedExpression resolve_expression_binary(Expression *expr) {
 ResolvedExpression resolve_expression_field(Expression *expr) {
     ResolvedExpression operand = resolve_expression(expr->field.operand);
     complete_type(operand.type);
+    if (operand.type->kind == TYPE_POINTER) {
+        operand.type = operand.type->pointer.base;
+    }
     if (operand.type->kind != TYPE_STRUCT && operand.type->kind != TYPE_UNION) {
         fatal_error(expr->location, "Can only access fields on aggregate types");
     }
@@ -1178,7 +1165,7 @@ ResolvedExpression resolve_expression_expected_type(Expression *expr, Type *expe
             resolved = resolved_const(type_int, (Value){.i = expr->int_val});
             break;
         case EXPR_FLOAT:
-            resolved = resolved_const(type_float, (Value) {.f = (float)expr->float_val});
+            resolved = resolved_const(type_float, (Value) {0});
             break;
         case EXPR_STR:
             resolved = resolved_rvalue(type_pointer(type_char));
@@ -1253,28 +1240,33 @@ void resolve_conditional_expression(Expression *expr) {
     }
 }
 
-void resolve_statement_block(StatementBlock block, Type *ret_type) {
+bool resolve_statement_block(StatementBlock block, Type *ret_type) {
     Entity *entities = local_scope_enter();
+    bool returns = false;
     for (size_t i = 0; i < block.num_statements; i++) {
-        resolve_statement(block.statements[i], ret_type);
+        returns = resolve_statement(block.statements[i], ret_type);
     }
     local_scope_leave(entities);
+    return returns;
 }
 
-void resolve_statement(Statement *stmt, Type *ret_type) {
+bool resolve_statement(Statement *stmt, Type *ret_type) {
     switch (stmt->kind) {
-        case STMT_IF:
+        case STMT_IF: {
             resolve_conditional_expression(stmt->if_stmt.cond);
-            resolve_statement_block(stmt->if_stmt.then, ret_type);
+            bool returns = resolve_statement_block(stmt->if_stmt.then, ret_type);
             for (size_t i = 0; i < stmt->if_stmt.num_else_ifs; i++) {
                 ElseIf else_if = stmt->if_stmt.else_ifs[i];
                 resolve_conditional_expression(else_if.cond);
-                resolve_statement_block(else_if.body, ret_type);
+                returns = resolve_statement_block(else_if.body, ret_type);
             }
             if (stmt->if_stmt.else_body.statements) {
-                resolve_statement_block(stmt->if_stmt.else_body, ret_type);
+                returns = resolve_statement_block(stmt->if_stmt.else_body, ret_type);
+            } else {
+                returns = false;
             }
-            break;
+            return returns;
+        }
         case STMT_FOR: {
             Entity *entities = local_scope_enter();
             resolve_statement(stmt->for_stmt.init, ret_type);
@@ -1282,15 +1274,17 @@ void resolve_statement(Statement *stmt, Type *ret_type) {
             resolve_statement(stmt->for_stmt.next, ret_type);
             resolve_statement_block(stmt->for_stmt.body, ret_type);
             local_scope_leave(entities);
-            break;
+            return false;
         }
         case STMT_WHILE:
         case STMT_DO_WHILE:
             resolve_conditional_expression(stmt->while_stmt.cond);
             resolve_statement_block(stmt->while_stmt.body, ret_type);
-            break;
+            return false;
         case STMT_SWITCH: {
             ResolvedExpression expr = resolve_expression(stmt->switch_stmt.expr);
+            bool returns = false;
+            bool has_default = false;
             for (size_t i = 0; i < stmt->switch_stmt.num_cases; i++) {
                 SwitchCase _case = stmt->switch_stmt.cases[i];
                 for (size_t j = 0; j < _case.num_expressions; j++) {
@@ -1299,9 +1293,17 @@ void resolve_statement(Statement *stmt, Type *ret_type) {
                         fatal_error(stmt->location, "Case expression in switch typespec mismatch");
                     }
                 }
-                resolve_statement_block(_case.body, ret_type);
+                returns = resolve_statement_block(_case.body, ret_type);
+
+                if (_case.is_default) {
+                    if (has_default) {
+                        fatal_error(stmt->location, "Switch statement has nultiple default")
+                    }
+                    has_default = true;
+                }
             }
-            break;
+
+            return returns && has_default;
         }
         case STMT_ASSIGN: {
             ResolvedExpression left = resolve_expression(stmt->assign.left);
@@ -1314,11 +1316,11 @@ void resolve_statement(Statement *stmt, Type *ret_type) {
                     fatal_error(stmt->location, "Illegal conversion right to left operand");
                 }
             }
-            break;
+            return false;
         }
         case STMT_AUTO_ASSIGN:
             local_entities_push_var(stmt->auto_assign.name, resolve_expression(stmt->auto_assign.init).type);
-            break;
+            return false;
         case STMT_RETURN:
             if (stmt->expr) {
                 ResolvedExpression ret = resolve_expression_expected_type(stmt->expr, ret_type);
@@ -1330,16 +1332,16 @@ void resolve_statement(Statement *stmt, Type *ret_type) {
                     fatal_error(stmt->location, "Empty return expression for function with non-void return typespec");
                 }
             }
-            break;
+            return true;
         case STMT_BREAK:
         case STMT_CONTINUE:
-            break;
+            return false;
         case STMT_EXPR:
             resolve_expression(stmt->expr);
-            break;
+            return false;
         default:
             assert(0);
-            break;
+            return false;
     }
 }
 
@@ -1456,8 +1458,12 @@ void resolve_func(Entity *entity) {
         FuncParam param = entity->decl->func.params[i];
         local_entities_push_var(param.name, resolve_typespec(param.type));
     }
-    resolve_statement_block(entity->decl->func.body, resolve_typespec(entity->decl->func.return_type));
+    Type *ret = resolve_typespec(entity->decl->func.return_type);
+    bool returns = resolve_statement_block(entity->decl->func.body, ret);
     local_scope_leave(entities);
+    if (ret != type_void && !returns) {
+        fatal_error(entity->decl->location, "Not all control path return value");
+    }
 }
 
 void resolve_entity(Entity *entity) {
@@ -1534,6 +1540,9 @@ void init_entities() {
     entity_append_type("llong", type_llong);
     entity_append_type("ullong", type_ullong);
     entity_append_type("float", type_float);
+
+    entity_append_const("true", type_bool, (Value) {.b = true});
+    entity_append_const("false", type_bool, (Value) {.b = false});
 }
 
 void entities_append_declaration_list(DeclarationList *decl_list) {

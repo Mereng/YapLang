@@ -3,6 +3,7 @@ int gen_indent = 0;
 SrcLocation gen_location;
 
 const char *gen_init = "#include <stdio.h>\n"
+                       "#include <stdbool.h>\n"
                        "#include <math.h>\n"
                        "typedef signed char schar;\n"
                        "typedef unsigned char uchar;\n"
@@ -211,7 +212,7 @@ void generate_expression(Expression *expr) {
             break;
         case EXPR_FIELD:
             generate_expression(expr->field.operand);
-            genf(".%s", expr->field.name);
+            genf("%s%s", expr->field.operand->type->kind == TYPE_POINTER ? "->" : ".", expr->field.name);
             break;
         case EXPR_COMPOUND:
             generate_expression_compound(expr, false);
@@ -478,15 +479,9 @@ void generate_declaration(Entity *entity) {
     generate_sync_location(decl->location);
     switch (decl->kind) {
         case DECL_CONST:
-            if (is_integer_type(entity->type)) {
-                genlnf("enum { %s = ", decl->entity->name);
-                generate_expression(decl->const_decl.expr);
-                genf(" };");
-            } else {
-                genlnf("#define %s (", entity->name);
-                generate_expression(decl->const_decl.expr);
-                genf(")");
-            }
+            genlnf("#define %s (", entity->name);
+            generate_expression(decl->const_decl.expr);
+            genf(")");
             break;
         case DECL_VAR:
             if (decl->var.type && !is_array_type_incomplete(decl->var.type)) {

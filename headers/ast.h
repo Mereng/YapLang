@@ -49,6 +49,7 @@ typedef union Value {
     char c;
     signed char sc;
     unsigned char uc;
+    bool b;
     short s;
     unsigned short us;
     int i;
@@ -57,8 +58,6 @@ typedef union Value {
     unsigned long ul;
     long long ll;
     unsigned long long ull;
-    float f;
-    double d;
 } Value;
 
 typedef struct Entity {
@@ -82,6 +81,7 @@ typedef enum TypeKind {
     TYPE_NONE,
     TYPE_VOID,
     TYPE_CHAR,
+    TYPE_BOOL,
     TYPE_SCHAR,
     TYPE_UCHAR,
     TYPE_SHORT,

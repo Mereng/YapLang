@@ -396,37 +396,38 @@ Statement* parse_statement_switch(SrcLocation location) {
 }
 
 Statement* parse_statement() {
+    SrcLocation location = token.location;
     if (match_keyword(keywords.if_keyword)) {
-        return parse_statement_if(token.location);
+        return parse_statement_if(location);
     } else if (match_keyword(keywords.for_keyword)) {
-        return parse_statement_for(token.location);
+        return parse_statement_for(location);
     } else if (match_keyword(keywords.while_keyword)) {
-        return parse_statement_while(token.location);
+        return parse_statement_while(location);
     } else if (match_keyword(keywords.do_keyword)) {
-        return parse_statement_do_while(token.location);
+        return parse_statement_do_while(location);
     } else if (match_keyword(keywords.switch_keyword)) {
-        return parse_statement_switch(token.location);
+        return parse_statement_switch(location);
     } else if (match_keyword(keywords.return_keyword)) {
         Statement *stmt = NULL;
         if (!is_token(TOKEN_SEMICOLON)) {
-           stmt = statement_return(parse_expression(), token.location);
+           stmt = statement_return(parse_expression(), location);
         } else {
-            stmt = statement_return(NULL, token.location);
+            stmt = statement_return(NULL, location);
         }
         expect_token(TOKEN_SEMICOLON);
         return stmt;
     } else if (match_keyword(keywords.break_keyword)) {
         expect_token(TOKEN_SEMICOLON);
-        return statement_break(token.location);
+        return statement_break(location);
     } else if (match_keyword(keywords.continue_keyword)) {
         expect_token(TOKEN_SEMICOLON);
-        return statement_continue(token.location);
+        return statement_continue(location);
     } else if (is_token(TOKEN_LBRACE)) {
-        return statement_block(parse_statement_block(), token.location);
+        return statement_block(parse_statement_block(), location);
     } else {
         Declaration *d = try_parse_declaration();
         if (d) {
-            return statement_decl(d, token.location);
+            return statement_decl(d, location);
         }
         Statement *stmt = parse_statement_simple();
         expect_token(TOKEN_SEMICOLON);
