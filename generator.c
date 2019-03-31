@@ -46,9 +46,11 @@ void generate_expression(Expression *expr);
 char* type_to_cdecl(Type *type, const char *str) {
     switch (type->kind) {
         case TYPE_ARRAY:
-            return type_to_cdecl(type->array.base, cdecl_paren(stringf("%s[%"PRIu64"]", str, type->array.size), *str));
+            return type_to_cdecl(type->base, cdecl_paren(stringf("%s[%"PRIu64"]", str, type->num_elements), *str));
         case TYPE_POINTER:
-            return type_to_cdecl(type->pointer.base, cdecl_paren(stringf("*%s", str), *str));
+            return type_to_cdecl(type->base, cdecl_paren(stringf("*%s", str), *str));
+        case TYPE_CONST:
+            return type_to_cdecl(type->base, stringf("const %s", cdecl_paren(str, *str)));
         case TYPE_FUNC: {
             char *buf = NULL;
             buf_printf(buf, "%s(", cdecl_paren(stringf("*%s", str), *str));
@@ -79,13 +81,15 @@ char* typespec_to_cdecl(Typespec *typespec, const char *str) {
         case TYPESPEC_ARRAY: {
             char *tmp_buf = gen_buf;
             gen_buf = NULL;
-            generate_expression(typespec->array.size);
-            char *r = typespec_to_cdecl(typespec->array.base, cdecl_paren(stringf("%s[%s]", str, gen_buf), *str));
+            generate_expression(typespec->size);
+            char *r = typespec_to_cdecl(typespec->base, cdecl_paren(stringf("%s[%s]", str, gen_buf), *str));
             gen_buf = tmp_buf;
             return r;
         }
         case TYPESPEC_POINTER:
-            return typespec_to_cdecl(typespec->pointer.base, cdecl_paren(stringf("*%s", str), *str));
+            return typespec_to_cdecl(typespec->base, cdecl_paren(stringf("*%s", str), *str));
+        case TYPESPEC_CONST:
+            return typespec_to_cdecl(typespec->base, stringf("const %s", cdecl_paren(str, *str)));
         case TYPESPEC_FUNC: {
             char *buf = NULL;
             buf_printf(buf, "%s(", cdecl_paren(stringf("*%s", str), *str));
@@ -288,7 +292,7 @@ void generate_simple_statement(Statement *stmt) {
             generate_expression(stmt->expr);
             break;
         case STMT_AUTO_ASSIGN:
-            genf("%s = ", type_to_cdecl(stmt->auto_assign.init->type, stmt->auto_assign.name));
+            genf("%s = ", type_to_cdecl(base_type(stmt->auto_assign.init->type), stmt->auto_assign.name));
             generate_init_expression(stmt->auto_assign.init);
             break;
         case STMT_ASSIGN:
@@ -478,7 +482,7 @@ void generate_aggregate(Declaration *decl) {
 }
 
 bool is_array_type_incomplete(Typespec *typespec) {
-    return typespec->kind == TYPESPEC_ARRAY && !typespec->array.size;
+    return typespec->kind == TYPESPEC_ARRAY && !typespec->size;
 }
 
 void generate_declaration(Entity *entity) {

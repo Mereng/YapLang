@@ -263,7 +263,7 @@ Typespec *parse_type() {
     SrcLocation location = token.location;
     Typespec *type = parse_type_base();
 
-    while (is_token(TOKEN_LBRACKET) || is_token(TOKEN_MUL)) {
+    while (is_token(TOKEN_LBRACKET) || is_token(TOKEN_MUL) || is_keyword(keywords.const_keyword)) {
         if (match_token(TOKEN_LBRACKET)) {
             Expression *expr = NULL;
             if (!is_token(TOKEN_RBRACKET)) {
@@ -271,6 +271,8 @@ Typespec *parse_type() {
             }
             expect_token(TOKEN_RBRACKET);
             type = typespec_array(type, expr, location);
+        } else if (match_keyword(keywords.const_keyword)) {
+            type = typespec_const(type, location);
         } else {
             next_token();
             type = typespec_pointer(type, location);

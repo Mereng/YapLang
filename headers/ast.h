@@ -102,6 +102,7 @@ typedef enum TypeKind {
     TYPE_ARRAY,
     TYPE_INCOMPLETE,
     TYPE_COMPLETING,
+    TYPE_CONST,
     TYPE_MAX
 } TypeKind;
 
@@ -111,18 +112,14 @@ struct Type {
     size_t size;
     size_t align;
     Entity *entity;
+    Type *base;
+    bool is_nonmodify;
     union {
         struct {
             TypeField *fields;
             size_t num_fields;
         } aggregate;
-        struct {
-            Type *base;
-            int size;
-        } array;
-        struct {
-            Type *base;
-        } pointer;
+        size_t num_elements;
         struct {
             Type **args;
             size_t num_args;
@@ -151,13 +148,15 @@ enum TypespecKind {
     TYPESPEC_ARRAY,
     TYPESPEC_POINTER,
     TYPESPEC_NAME,
-    TYPESPEC_FUNC
+    TYPESPEC_FUNC,
+    TYPESPEC_CONST
 };
 
 struct Typespec {
     SrcLocation location;
     TypespecKind kind;
     Type *type;
+    Typespec *base;
     union {
         const char *name;
         struct {
@@ -166,13 +165,7 @@ struct Typespec {
             Typespec *ret;
             bool is_variadic;
         } func;
-        struct {
-            Typespec *base;
-            Expression *size;
-        } array;
-        struct {
-            Typespec *base;
-        } pointer;
+        Expression *size;
     };
 };
 
@@ -181,7 +174,7 @@ Typespec* typespec_name(const char *name, SrcLocation loc);
 Typespec* typespec_pointer(Typespec *base, SrcLocation loc);
 Typespec* typespec_array(Typespec *base, Expression *size, SrcLocation loc);
 Typespec* typespec_func(Typespec **args, size_t num_args, Typespec *ret, bool is_variadic, SrcLocation loc);
-
+Typespec* typespec_const(Typespec *base, SrcLocation loc);
 
 struct StatementBlock {
     Statement **statements;

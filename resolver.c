@@ -19,6 +19,10 @@ Type *type_double = &(Type){TYPE_DOUBLE, 8, 8};
 #define type_usize type_ullong
 #define type_size type_llong
 
+Type *type_pointer(Type *base);
+void complete_type(Type *type);
+Type* base_type(Type *type);
+
 typedef struct ResolvedExpression {
     Type *type;
     bool is_lvalue;
@@ -28,7 +32,7 @@ typedef struct ResolvedExpression {
 
 ResolvedExpression resolved_rvalue(Type *type) {
     return (ResolvedExpression) {
-        .type = type,
+        .type = base_type(type),
     };
 }
 
@@ -41,10 +45,19 @@ ResolvedExpression resolved_lvalue(Type *type) {
 
 ResolvedExpression resolved_const(Type *type, Value val) {
     return (ResolvedExpression) {
-        .type = type,
+        .type = base_type(type),
         .is_const = true,
         .val = val
     };
+}
+
+ResolvedExpression resolved_decay(ResolvedExpression operand) {
+    operand.type = base_type(operand.type);
+    if (operand.type->kind == TYPE_ARRAY) {
+        return resolved_rvalue(type_pointer(operand.type->base));
+    } else {
+        return operand;
+    }
 }
 
 bool is_integer_type(Type *type) {
@@ -69,7 +82,7 @@ bool is_convertible(Type *dest, Type *src) {
     if (dest == src) {
         return true;
     } else if (dest->kind == TYPE_POINTER && src->kind == TYPE_POINTER) {
-        return dest->pointer.base == type_void || src->pointer.base == type_void;
+        return dest->base == type_void || src->base == type_void;
     } else if (is_math_type(dest) && is_math_type(src)) {
         return true;
     } else if (is_math_type(dest)) {
@@ -137,38 +150,39 @@ bool is_convertible(Type *dest, Type *src) {
         break;
 
 bool convert_expression(ResolvedExpression *operand, Type *type) {
-    if (operand->type == type) {
-        return true;
-    }
-    if (!is_convertible(operand->type, type)) {
-        return false;
-    }
+    type = base_type(type);
+    operand->type = base_type(operand->type);
+    if (operand->type != type) {
+        if (!is_convertible(type, operand->type)) {
+            return false;
+        }
 
-    if (type->kind == TYPE_POINTER && is_math_type(operand->type) && !is_null_pointer(*operand)) {
-        return false;
-    }
+        if (type->kind == TYPE_POINTER && is_math_type(operand->type) && !is_null_pointer(*operand)) {
+            return false;
+        }
 
-    if (operand->is_const) {
-        if (is_floating_type(operand->type)) {
-            operand->is_const = !is_integer_type(type);
-        } else {
-            switch (operand->type->kind) {
-                CASE(TYPE_BOOL, b)
-                CASE(TYPE_CHAR, c)
-                CASE(TYPE_SCHAR, sc)
-                CASE(TYPE_UCHAR, uc)
-                CASE(TYPE_SHORT, s)
-                CASE(TYPE_USHORT, us)
-                CASE(TYPE_INT, i)
-                CASE(TYPE_UINT, ui)
-                CASE(TYPE_LONG, l)
-                CASE(TYPE_ULONG, ul)
-                CASE(TYPE_LLONG, ll)
-                CASE(TYPE_ULLONG, ull)
-                CASE(TYPE_POINTER, p)
-                default:
-                    operand->is_const = false;
-                    break;
+        if (operand->is_const) {
+            if (is_floating_type(operand->type)) {
+                operand->is_const = !is_integer_type(type);
+            } else {
+                switch (operand->type->kind) {
+                    CASE(TYPE_BOOL, b)
+                    CASE(TYPE_CHAR, c)
+                    CASE(TYPE_SCHAR, sc)
+                    CASE(TYPE_UCHAR, uc)
+                    CASE(TYPE_SHORT, s)
+                    CASE(TYPE_USHORT, us)
+                    CASE(TYPE_INT, i)
+                    CASE(TYPE_UINT, ui)
+                    CASE(TYPE_LONG, l)
+                    CASE(TYPE_ULONG, ul)
+                    CASE(TYPE_LLONG, ll)
+                    CASE(TYPE_ULLONG, ull)
+                    CASE(TYPE_POINTER, p)
+                    default:
+                        operand->is_const = false;
+                        break;
+                }
             }
         }
     }
@@ -218,7 +232,7 @@ Type *type_pointer(Type *base) {
         type = type_new(TYPE_POINTER);
         type->size = POINTER_SIZE;
         type->align = POINTER_ALIGN;
-        type->pointer.base = base;
+        type->base = base;
         map_put(&pointer_types_cache, base, type);
     }
     return type;
@@ -226,13 +240,13 @@ Type *type_pointer(Type *base) {
 
 typedef struct ArrayTypeCached {
     Type *base;
-    int size;
+    size_t size;
     Type *array;
 } ArrayTypeCached;
 
 ArrayTypeCached *array_type_cache;
 
-Type* type_array(Type *base, int size) {
+Type* type_array(Type *base, size_t size) {
     for (ArrayTypeCached *it = array_type_cache; it != buf_end(array_type_cache); it++) {
         if (it->base == base && it->size == size) {
             return it->array;
@@ -242,12 +256,31 @@ Type* type_array(Type *base, int size) {
     Type *type = type_new(TYPE_ARRAY);
     type->size = size * base->size;
     type->align = base->align;
-    type->array.base = base;
-    type->array.size = size;
+    type->base = base;
+    type->num_elements = size;
+    type->is_nonmodify = base->is_nonmodify;
     buf_push(array_type_cache, ((ArrayTypeCached){base, size, type}));
     return type;
 }
 
+Map const_types_cache;
+Type* type_const(Type *base) {
+    if (base->kind == TYPE_CONST) {
+        return base;
+    }
+
+    Type *type = map_get(&const_types_cache, base);
+    if (!type) {
+        complete_type(base);
+        type = type_new(TYPE_CONST);
+        type->is_nonmodify = true;
+        type->size = base->size;
+        type->align = base->align;
+        type->base = base;
+        map_put(&const_types_cache, base, type);
+    }
+    return type;
+}
 
 typedef struct FuncTypeCached {
     Type **params;
@@ -292,6 +325,14 @@ Type* type_incomplete(Entity *entity) {
     Type *type = type_new(TYPE_INCOMPLETE);
     type->entity = entity;
     return type;
+}
+
+Type* base_type(Type *type) {
+    if (type->kind == TYPE_CONST) {
+        return type->base;
+    } else {
+        return type;
+    }
 }
 
 bool issigned(Type *type) {
@@ -399,27 +440,34 @@ void type_complete_struct(Type* type, TypeField *fields, size_t num_fields) {
     type->kind = TYPE_STRUCT;
     type->size = 0;
     type->align = 0;
+    bool is_nonmodify = false;
     for (TypeField *it = fields; it != fields + num_fields; it++) {
         it->offset = type->size;
         type->size = it->type->size + ALIGN_UP(type->size, it->type->align);
         type->align = MAX(type->align, it->type->align);
+        is_nonmodify = is_nonmodify || it->type->is_nonmodify;
     }
     type->aggregate.fields = calloc(num_fields, sizeof(TypeField));
     memcpy(type->aggregate.fields, fields, num_fields * sizeof(TypeField));
     type->aggregate.num_fields = num_fields;
+    type->is_nonmodify = is_nonmodify;
 }
 
 void type_complete_union(Type* type, TypeField *fields, size_t num_fields) {
     type->kind = TYPE_UNION;
     type->size = 0;
+    type->align = 0;
+    bool is_nonmodify = false;
     for (TypeField *it = fields; it != fields + num_fields; it++) {
         it->offset = 0;
         type->size = MAX(it->type->size, type->size);
         type->align = MAX(it->type->align, type->align);
+        is_nonmodify = is_nonmodify || it->type->is_nonmodify;
     }
     type->aggregate.fields = calloc(num_fields, sizeof(TypeField));
     memcpy(type->aggregate.fields, fields, num_fields * sizeof(TypeField));
     type->aggregate.num_fields = num_fields;
+    type->is_nonmodify = is_nonmodify;
 }
 
 bool check_duplicate_fields(TypeField *fields, size_t num_fields) {
@@ -448,6 +496,9 @@ void complete_type(Type *type) {
 
     for (AggregateItem *it = decl->aggregate.items; it != decl->aggregate.items + decl->aggregate.num_items; it++) {
         Type *item_type = resolve_typespec(it->type);
+        if (item_type->kind == TYPE_CONST) {
+            fatal_error(it->location, "Field can't be const");
+        }
         complete_type(item_type);
         for (const char **name = it->names; name != it->names + it->num_names; name++) {
             buf_push(fields, ((TypeField){*name, item_type}));
@@ -844,16 +895,10 @@ Entity* resolve_entity_name(const char *name);
 ResolvedExpression resolve_expression_expected_type(Expression *expr, Type *expected_type);
 ResolvedExpression resolve_expression(Expression *expr);
 ResolvedExpression resolve_const_expression(Expression *expr);
+ResolvedExpression resolve_expression_decayed(Expression *expr);
+ResolvedExpression resolve_expression_decayed_expected_type(Expression *expr, Type *expected_type);
 
 bool resolve_statement(Statement *stmt, Type *ret_type);
-
-ResolvedExpression pointer_decay(ResolvedExpression expr) {
-    if (expr.type->kind == TYPE_ARRAY) {
-        return resolved_rvalue(type_pointer(expr.type->array.base));
-    } else {
-        return expr;
-    }
-}
 
 ResolvedExpression resolve_expression_name(Expression *expr) {
     Entity *entity = resolve_entity_name(expr->name);
@@ -881,14 +926,13 @@ ResolvedExpression resolve_unary(TokenKind op, ResolvedExpression operand) {
 }
 
 ResolvedExpression resolve_expression_unary(Expression *expr) {
-    ResolvedExpression operand = resolve_expression(expr->unary.operand);
+    ResolvedExpression operand = resolve_expression_decayed(expr->unary.operand);
     switch (expr->unary.op) {
         case TOKEN_MUL:
-            operand = pointer_decay(operand);
             if (operand.type->kind != TYPE_POINTER) {
-                fatal_error(expr->location, "Can't dereference non pointer typespec");
+                fatal_error(expr->location, "Can't dereference non pointer type");
             }
-            return resolved_lvalue(operand.type->pointer.base);
+            return resolved_lvalue(operand.type->base);
         case TOKEN_BIN_AND:
             if (!operand.is_lvalue) {
                 fatal_error(expr->location, "Can't take address of non-lvalue");
@@ -928,8 +972,8 @@ ResolvedExpression resolve_binary_math(TokenKind op, ResolvedExpression left, Re
 }
 
 ResolvedExpression resolve_expression_binary(Expression *expr) {
-    ResolvedExpression left = resolve_expression(expr->binary.left);
-    ResolvedExpression right = resolve_expression(expr->binary.right);
+    ResolvedExpression left = resolve_expression_decayed(expr->binary.left);
+    ResolvedExpression right = resolve_expression_decayed(expr->binary.right);
     switch (expr->binary.op) {
         case TOKEN_MUL:
         case TOKEN_DIV:
@@ -966,7 +1010,7 @@ ResolvedExpression resolve_expression_binary(Expression *expr) {
             } else if (left.type->kind == TYPE_POINTER && is_integer_type(right.type)) {
                 return resolved_rvalue(left.type);
             } else if (left.type->kind == TYPE_POINTER && right.type->kind == TYPE_POINTER) {
-                if (left.type->pointer.base != right.type->pointer.base) {
+                if (left.type->base != right.type->base) {
                     fatal_error(expr->location, "Can't subtract different pointers");
                 }
                 return resolved_rvalue(type_size);
@@ -1002,7 +1046,7 @@ ResolvedExpression resolve_expression_binary(Expression *expr) {
                 convert_expression(&result, type_int);
                 return result;
             } else if (left.type->kind == TYPE_POINTER && right.type->kind == TYPE_POINTER) {
-                if (left.type->pointer.base != right.type->pointer.base) {
+                if (left.type->base != right.type->base) {
                     fatal_error(expr->location, "Can't compare different pointer")
                 }
                 return resolved_rvalue(type_int);
@@ -1037,17 +1081,23 @@ ResolvedExpression resolve_expression_binary(Expression *expr) {
 
 ResolvedExpression resolve_expression_field(Expression *expr) {
     ResolvedExpression operand = resolve_expression(expr->field.operand);
-    complete_type(operand.type);
+    bool is_const = operand.type->kind == TYPE_CONST;
+    Type *type = base_type(operand.type);
+    complete_type(type);
     if (operand.type->kind == TYPE_POINTER) {
-        operand.type = operand.type->pointer.base;
+        type = type->base;
     }
-    if (operand.type->kind != TYPE_STRUCT && operand.type->kind != TYPE_UNION) {
+    if (type->kind != TYPE_STRUCT && type->kind != TYPE_UNION) {
         fatal_error(expr->location, "Can only access fields on aggregate types");
     }
 
-    for (TypeField *it = operand.type->aggregate.fields; it != operand.type->aggregate.fields + operand.type->aggregate.num_fields; it++) {
+    for (TypeField *it = type->aggregate.fields; it != type->aggregate.fields + type->aggregate.num_fields; it++) {
         if (it->name == expr->field.name) {
-            return operand.is_lvalue ? resolved_lvalue(it->type) : resolved_rvalue(it->type);
+            ResolvedExpression field = operand.is_lvalue ? resolved_lvalue(it->type) : resolved_rvalue(it->type);
+            if (is_const) {
+                field.type = type_const(field.type);
+            }
+            return field;
         }
     }
 
@@ -1092,7 +1142,7 @@ ResolvedExpression resolve_expression_compound(Expression *expr, Type *expected_
                 fatal_error(field.location, "Field initializer in struct or union compound out of range");
             }
             Type *field_type = type->aggregate.fields[index].type;
-            ResolvedExpression init = resolve_expression_expected_type(field.init, field_type);
+            ResolvedExpression init = resolve_expression_decayed_expected_type(field.init, field_type);
             if (!convert_expression(&init, field_type)) {
                 fatal_error(field.location, "Illegal conversion");
             }
@@ -1118,19 +1168,19 @@ ResolvedExpression resolve_expression_compound(Expression *expr, Type *expected_
                 index = tmp_indx.val.i;
             }
 
-            if (type->array.size && index >= type->aggregate.num_fields) {
+            if (type->num_elements && index >= type->num_elements) {
                 fatal_error(field.location, "Field initializer in array out of range");
             }
-            ResolvedExpression init_val = resolve_expression_expected_type(expr->compound.fields[i].init,
-                    type->array.base);
-            if (!convert_expression(&init_val, type->array.base)) {
+            ResolvedExpression init_val = resolve_expression_decayed_expected_type(expr->compound.fields[i].init,
+                    type->base);
+            if (!convert_expression(&init_val, type->base)) {
                 fatal_error(field.location, "Illegal conversion in initializer");
             }
             index_max = MAX(index_max, index);
             index++;
         }
-        if (type->array.size == 0) {
-            type = type_array(type->array.base, index_max + 1);
+        if (type->num_elements == 0) {
+            type = type_array(type->base, index_max + 1);
         }
     } else {
         if (expr->compound.num_fields > 1) {
@@ -1138,7 +1188,7 @@ ResolvedExpression resolve_expression_compound(Expression *expr, Type *expected_
         }
         if (expr->compound.num_fields == 1) {
             CompoundField field = expr->compound.fields[0];
-            ResolvedExpression init_val = resolve_expression_expected_type(field.init, type);
+            ResolvedExpression init_val = resolve_expression_decayed_expected_type(field.init, type);
             if (!convert_expression(&init_val, type)) {
                 fatal_error(field.location, "Illegal conversion in compound literal");
             }
@@ -1155,7 +1205,7 @@ ResolvedExpression resolve_expression_call(Expression *expr) {
             if (expr->call.num_args != 1) {
                 fatal_error(expr->location, "Type conversion is invalid, operator takes 1 argument");
             }
-            ResolvedExpression operand = resolve_expression(expr->call.args[0]);
+            ResolvedExpression operand = resolve_expression_decayed(expr->call.args[0]);
             if (!convert_expression(&operand, entity->type)) {
                 fatal_error(expr->location, "Invalid type conversion");
             }
@@ -1163,7 +1213,7 @@ ResolvedExpression resolve_expression_call(Expression *expr) {
         }
     }
 
-    ResolvedExpression func = resolve_expression(expr->call.operand);
+    ResolvedExpression func = resolve_expression_decayed(expr->call.operand);
     complete_type(func.type);
     if (func.type->kind != TYPE_FUNC) {
         fatal_error(expr->location, "Calling non-function value");
@@ -1180,27 +1230,27 @@ ResolvedExpression resolve_expression_call(Expression *expr) {
 
     for (size_t i = 0; i < num_args; i++) {
         Type *param = func.type->func.args[i];
-        ResolvedExpression arg = resolve_expression_expected_type(expr->call.args[i], param);
+        ResolvedExpression arg = resolve_expression_decayed_expected_type(expr->call.args[i], param);
         if (!convert_expression(&arg, param)) {
             fatal_error(expr->call.args[i]->location, "Call argument expression typespec doesn't match expected typespec");
         }
     }
 
     for (size_t i = num_args; i < expr->call.num_args; i++) {
-        resolve_expression(expr->call.args[i]);
+        resolve_expression_decayed(expr->call.args[i]);
     }
 
     return resolved_rvalue(func.type->func.ret);
 }
 
 ResolvedExpression resolve_expression_ternary(Expression *expr, Type *expected_type) {
-    ResolvedExpression cond = pointer_decay(resolve_expression(expr->ternary.cond));
+    ResolvedExpression cond = resolve_expression_decayed(expr->ternary.cond);
     if (!is_scalar_type(cond.type)) {
         fatal_error(expr->location, "Condition expression of ternary operator ? must have scalar type");
     }
 
-    ResolvedExpression then_ex = pointer_decay(resolve_expression_expected_type(expr->ternary.then_ex, expected_type));
-    ResolvedExpression else_ex = pointer_decay(resolve_expression_expected_type(expr->ternary.else_ex, expected_type));
+    ResolvedExpression then_ex = resolve_expression_decayed_expected_type(expr->ternary.then_ex, expected_type);
+    ResolvedExpression else_ex = resolve_expression_decayed_expected_type(expr->ternary.else_ex, expected_type);
     if (is_math_type(then_ex.type) && is_math_type(else_ex.type)) {
         unify_math_expressions(&then_ex, &else_ex);
         if (cond.is_const && then_ex.is_const && else_ex.is_const) {
@@ -1216,7 +1266,7 @@ ResolvedExpression resolve_expression_ternary(Expression *expr, Type *expected_t
 }
 
 ResolvedExpression resolve_expression_index(Expression *expr) {
-    ResolvedExpression operand = pointer_decay(resolve_expression(expr->index.operand));
+    ResolvedExpression operand = resolve_expression_decayed(expr->index.operand);
     if (operand.type->kind != TYPE_POINTER) {
         fatal_error(expr->location, "Can only index arrays or pointers");
     }
@@ -1225,12 +1275,12 @@ ResolvedExpression resolve_expression_index(Expression *expr) {
     if (index.type->kind != TYPE_INT) {
         fatal_error(expr->location, "Index must have typespec int");
     }
-    return resolved_lvalue(operand.type->pointer.base);
+    return resolved_lvalue(operand.type->base);
 }
 
 ResolvedExpression resolve_expression_cast(Expression *expr) {
     Type *type = resolve_typespec(expr->cast.typespec);
-    ResolvedExpression result = pointer_decay(resolve_expression(expr->cast.expr));
+    ResolvedExpression result = resolve_expression_decayed(expr->cast.expr);
     if (!convert_expression(&result, type)) {
         fatal_error(expr->location, "Illegal conversion");
     }
@@ -1247,7 +1297,7 @@ ResolvedExpression resolve_expression_expected_type(Expression *expr, Type *expe
             resolved = resolved_const(type_float, (Value) {0});
             break;
         case EXPR_STR:
-            resolved = resolved_rvalue(type_pointer(type_char));
+            resolved = resolved_rvalue(type_pointer(type_const(type_char)));
             break;
         case EXPR_NAME:
             resolved = resolve_expression_name(expr);
@@ -1310,6 +1360,14 @@ ResolvedExpression resolve_const_expression(Expression *expr) {
         fatal_error(expr->location, "Expected constant expression");
     }
     return result;
+}
+
+ResolvedExpression resolve_expression_decayed(Expression *expr) {
+    return resolved_decay(resolve_expression(expr));
+}
+
+ResolvedExpression resolve_expression_decayed_expected_type(Expression *expr, Type *expected_type) {
+    return resolved_decay(resolve_expression_expected_type(expr, expected_type));
 }
 
 void resolve_conditional_expression(Expression *expr) {
@@ -1389,8 +1447,11 @@ bool resolve_statement(Statement *stmt, Type *ret_type) {
             if (!left.is_lvalue) {
                 fatal_error(stmt->location, "Can't assign to non-lvalue");
             }
+            if (left.type->is_nonmodify) {
+                fatal_error(stmt->location, "lvalue has non-modifiable type");
+            }
             if (stmt->assign.right) {
-                ResolvedExpression right = resolve_expression_expected_type(stmt->assign.right, left.type);
+                ResolvedExpression right = resolve_expression_decayed_expected_type(stmt->assign.right, left.type);
                 if (!convert_expression(&right, left.type)) {
                     fatal_error(stmt->location, "Illegal conversion right to left operand");
                 }
@@ -1398,7 +1459,7 @@ bool resolve_statement(Statement *stmt, Type *ret_type) {
             return false;
         }
         case STMT_AUTO_ASSIGN:
-            if(!local_entities_push_var(stmt->auto_assign.name, resolve_expression(stmt->auto_assign.init).type)) {
+            if(!local_entities_push_var(stmt->auto_assign.name, base_type(resolve_expression(stmt->auto_assign.init).type))) {
                 fatal_error(stmt->location, "Duplicate definition");
             }
             return false;
@@ -1445,8 +1506,8 @@ Type* resolve_typespec(Typespec *typespec) {
         }
         case TYPESPEC_ARRAY: {
             int size = 0;
-            if (typespec->array.size) {
-                ResolvedExpression size_expr = resolve_const_expression(typespec->array.size);
+            if (typespec->size) {
+                ResolvedExpression size_expr = resolve_const_expression(typespec->size);
                 if (!is_integer_type(size_expr.type)) {
                     fatal_error(typespec->location, "Array size must definition by integer");
                 }
@@ -1456,11 +1517,14 @@ Type* resolve_typespec(Typespec *typespec) {
                     fatal_error(typespec->location, "Negative array size");
                 }
             }
-            type = type_array(resolve_typespec(typespec->array.base), size);
+            type = type_array(resolve_typespec(typespec->base), size);
             break;
         }
+        case TYPESPEC_CONST:
+            type = type_const(resolve_typespec(typespec->base));
+            break;
         case TYPESPEC_POINTER:
-            type = type_pointer(resolve_typespec(typespec->pointer.base));
+            type = type_pointer(resolve_typespec(typespec->base));
             break;
         case TYPESPEC_FUNC: {
             Type **args = NULL;
@@ -1497,8 +1561,8 @@ Type* resolve_declaration_var(Declaration *decl) {
     if (decl->var.expr) {
         ResolvedExpression result = resolve_expression_expected_type(decl->var.expr, type);
         if (type && result.type != type) {
-            if (!(type->kind == TYPE_ARRAY && result.type->kind == TYPE_ARRAY && type->array.base == result.type->array.base
-                && !type->array.size)) {
+            if (!(type->kind == TYPE_ARRAY && result.type->kind == TYPE_ARRAY && type->base == result.type->base
+                && !type->num_elements)) {
                 if (!convert_expression(&result, type)) {
                     fatal_error(decl->location, "Illegal conversion in variable initializer");
                 }

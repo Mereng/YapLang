@@ -1,8 +1,6 @@
 #include <malloc.h>
 #include <memory.h>
 #include <inttypes.h>
-#include <ast.h>
-
 
 #include "ast.h"
 #include "aalloc.h"
@@ -43,13 +41,13 @@ Typespec* typespec_name(const char *name, SrcLocation loc) {
 }
 Typespec* typespec_pointer(Typespec *base, SrcLocation loc) {
     Typespec *typespec = typespec_new(TYPESPEC_POINTER, loc);
-    typespec->pointer.base = base;
+    typespec->base = base;
     return typespec;
 }
 Typespec* typespec_array(Typespec *base, Expression *size, SrcLocation loc) {
     Typespec *typespec = typespec_new(TYPESPEC_ARRAY, loc);
-    typespec->array.base = base;
-    typespec->array.size = size;
+    typespec->base = base;
+    typespec->size = size;
     return typespec;
 }
 Typespec* typespec_func(Typespec **args, size_t num_args, Typespec *ret, bool is_variadic, SrcLocation loc) {
@@ -58,6 +56,11 @@ Typespec* typespec_func(Typespec **args, size_t num_args, Typespec *ret, bool is
     typespec->func.num_args = num_args;
     typespec->func.ret = ret;
     typespec->func.is_variadic = is_variadic;
+    return typespec;
+}
+Typespec* typespec_const(Typespec *base, SrcLocation loc) {
+    Typespec *typespec = typespec_new(TYPESPEC_CONST, loc);
+    typespec->base = base;
     return typespec;
 }
 

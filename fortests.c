@@ -15,14 +15,14 @@ void print_type(Typespec *type) {
             break;
         case TYPESPEC_POINTER:
             printf("(pointer ");
-            print_type(type->pointer.base);
+            print_type(type->base);
             printf(")");
             break;
         case TYPESPEC_ARRAY:
             printf("(array ");
-            print_type(type->array.base);
+            print_type(type->base);
             printf(" ");
-            print_expression(type->array.size);
+            print_expression(type->size);
             printf(")");
             break;
         case TYPESPEC_FUNC:
