@@ -54,10 +54,10 @@ ResolvedExpression resolved_const(Type *type, Value val) {
 ResolvedExpression resolved_decay(ResolvedExpression operand) {
     operand.type = base_type(operand.type);
     if (operand.type->kind == TYPE_ARRAY) {
-        return resolved_rvalue(type_pointer(operand.type->base));
-    } else {
-        return operand;
+        operand.type = type_pointer(operand.type->base);
     }
+    operand.is_lvalue = false;
+    return operand;
 }
 
 bool is_integer_type(Type *type) {
@@ -78,17 +78,32 @@ bool is_scalar_type(Type *type) {
 
 bool is_null_pointer(ResolvedExpression operand);
 
-bool is_convertible(Type *dest, Type *src) {
+bool is_convertible(ResolvedExpression *operand, Type *dest) {
+    dest = base_type(dest);
+    Type *src = base_type(operand->type);
     if (dest == src) {
+        return true;
+    } else if (is_math_type(dest) && is_math_type(src)) {
         return true;
     } else if (dest->kind == TYPE_POINTER && src->kind == TYPE_POINTER) {
         return dest->base == type_void || src->base == type_void;
-    } else if (is_math_type(dest) && is_math_type(src)) {
+    } else if (is_null_pointer(*operand) && dest->kind == TYPE_POINTER) {
+        return true;
+    }
+
+    return false;
+}
+
+bool is_castable(ResolvedExpression *operand, Type *dest) {
+    Type *src = operand->type;
+    if (is_convertible(operand, dest)) {
         return true;
     } else if (is_math_type(dest)) {
         return src->kind == TYPE_POINTER;
     } else if (is_math_type(src)) {
         return dest->kind == TYPE_POINTER;
+    } else if (dest->kind == TYPE_POINTER && src->kind == TYPE_POINTER) {
+        return true;
     }
 
     return false;
@@ -149,15 +164,12 @@ bool is_convertible(Type *dest, Type *src) {
         } \
         break;
 
-bool convert_expression(ResolvedExpression *operand, Type *type) {
+bool cast_expression(ResolvedExpression *operand, Type *type) {
+    Type *limited_type = type;
     type = base_type(type);
     operand->type = base_type(operand->type);
     if (operand->type != type) {
-        if (!is_convertible(type, operand->type)) {
-            return false;
-        }
-
-        if (type->kind == TYPE_POINTER && is_math_type(operand->type) && !is_null_pointer(*operand)) {
+        if (!is_castable(operand, operand->type)) {
             return false;
         }
 
@@ -186,21 +198,30 @@ bool convert_expression(ResolvedExpression *operand, Type *type) {
             }
         }
     }
-    operand->type = type;
+    operand->type = limited_type;
     return true;
 }
 
 #undef CASE
 
+bool convert_expression(ResolvedExpression *operand, Type *type) {
+    if (is_convertible(operand, type)) {
+        cast_expression(operand, type);
+        *operand = resolved_rvalue(operand->type);
+        return true;
+    }
+    return false;
+}
+
 Value convert_const_expression(Type *src, Type *dest, Value val) {
     ResolvedExpression operand = resolved_const(src, val);
-    convert_expression(&operand, dest);
+    cast_expression(&operand, dest);
     return operand.val;
 }
 
 bool is_null_pointer(ResolvedExpression operand) {
     if (operand.is_const && (operand.type->kind == TYPE_POINTER || is_math_type(operand.type))) {
-        convert_expression(&operand, type_ullong);
+        cast_expression(&operand, type_ullong);
         return operand.val.ull == 0;
     } else {
         return false;
@@ -214,7 +235,7 @@ void promote_expression(ResolvedExpression *operand) {
         case TYPE_UCHAR:
         case TYPE_SHORT:
         case TYPE_USHORT:
-            convert_expression(operand, type_int);
+            cast_expression(operand, type_int);
             break;
         default:
             break;
@@ -647,35 +668,35 @@ void entity_append_typedef(const char *name, Type *type) {
 
 void unify_math_expressions(ResolvedExpression *left, ResolvedExpression *right) {
     if (left->type == type_double) {
-        convert_expression(right, type_double);
+        cast_expression(right, type_double);
     } else if (right->type == type_double) {
-        convert_expression(left, type_double);
+        cast_expression(left, type_double);
     } else if (left->type == type_float) {
-        convert_expression(right, type_float);
+        cast_expression(right, type_float);
     } else if (right->type == type_float) {
-        convert_expression(left, type_float);
+        cast_expression(left, type_float);
     } else {
         promote_expression(left);
         promote_expression(right);
         if (left->type != right->type) {
             if (issigned(left->type) && issigned(right->type)) {
                 if (type_rank(left->type) <= type_rank(right->type)) {
-                    convert_expression(left, right->type);
+                    cast_expression(left, right->type);
                 } else {
-                    convert_expression(right, left->type);
+                    cast_expression(right, left->type);
                 }
             } else if (issigned(left->type) && type_rank(right->type) >= type_rank(left->type)) {
-                convert_expression(left, right->type);
+                cast_expression(left, right->type);
             } else if (issigned(right->type) && type_rank(left->type) >= type_rank(right->type)) {
-                convert_expression(right, left->type);
+                cast_expression(right, left->type);
             } else if (issigned(left->type) && left->type->size > right->type->size) {
-                convert_expression(right, left->type);
+                cast_expression(right, left->type);
             } else if (issigned(right->type) && right->type->size > left->type->size) {
-                convert_expression(left, right->type);
+                cast_expression(left, right->type);
             } else {
                 Type *type = unsigned_type(issigned(left->type) ? left->type : right->type);
-                convert_expression(left, type);
-                convert_expression(right, type);
+                cast_expression(left, type);
+                cast_expression(right, type);
             }
         }
     }
@@ -695,7 +716,7 @@ Value eval_unary(TokenKind op, Type *type, Value value) {
     if (is_integer_type(type)) {
         ResolvedExpression operand = resolved_const(type, value);
         if (issigned(type)) {
-            convert_expression(&operand, type_llong);
+            cast_expression(&operand, type_llong);
             long long x = operand.val.ll;
             long long res;
             switch (op) {
@@ -717,7 +738,7 @@ Value eval_unary(TokenKind op, Type *type, Value value) {
             }
             operand.val.ll = res;
         } else {
-            convert_expression(&operand, type_ullong);
+            cast_expression(&operand, type_ullong);
             unsigned long long x = operand.val.ull;
             unsigned long long res;
             switch (op) {
@@ -739,7 +760,7 @@ Value eval_unary(TokenKind op, Type *type, Value value) {
             }
             operand.val.ull = res;
         }
-        convert_expression(&operand, type);
+        cast_expression(&operand, type);
         return operand.val;
     } else {
         return (Value){0};
@@ -752,8 +773,8 @@ Value eval_binary(TokenKind op, Type *type, Value left, Value right) {
         ResolvedExpression right_op = resolved_const(type, right);
         ResolvedExpression result;
         if (issigned(type)) {
-            convert_expression(&left_op, type_llong);
-            convert_expression(&right_op, type_llong);
+            cast_expression(&left_op, type_llong);
+            cast_expression(&right_op, type_llong);
             long long x = left_op.val.ll;
             long long y = right_op.val.ll;
             long long res;
@@ -818,8 +839,8 @@ Value eval_binary(TokenKind op, Type *type, Value left, Value right) {
             }
             result = resolved_const(type_llong, (Value) {.ll = res});
         } else {
-            convert_expression(&left_op, type_ullong);
-            convert_expression(&right_op, type_ullong);
+            cast_expression(&left_op, type_ullong);
+            cast_expression(&right_op, type_ullong);
             unsigned long long x = left_op.val.ull;
             unsigned long long y = right_op.val.ull;
             unsigned long long res;
@@ -884,7 +905,7 @@ Value eval_binary(TokenKind op, Type *type, Value left, Value right) {
             }
             result = resolved_const(type_llong, (Value) {.ull = res});
         }
-        convert_expression(&result, type);
+        cast_expression(&result, type);
         return result.val;
     } else {
         return (Value){0};
@@ -926,36 +947,39 @@ ResolvedExpression resolve_unary(TokenKind op, ResolvedExpression operand) {
 }
 
 ResolvedExpression resolve_expression_unary(Expression *expr) {
-    ResolvedExpression operand = resolve_expression_decayed(expr->unary.operand);
-    switch (expr->unary.op) {
-        case TOKEN_MUL:
-            if (operand.type->kind != TYPE_POINTER) {
-                fatal_error(expr->location, "Can't dereference non pointer type");
-            }
-            return resolved_lvalue(operand.type->base);
-        case TOKEN_BIN_AND:
-            if (!operand.is_lvalue) {
-                fatal_error(expr->location, "Can't take address of non-lvalue");
-            }
-            return (ResolvedExpression){type_pointer(operand.type)};
-        case TOKEN_ADD:
-        case TOKEN_SUB:
-            if (!is_math_type(operand.type)) {
-                fatal_error(expr->location, "Can only use unary %s with mathematics type",
-                        token_kind_names[expr->unary.op]);
-            }
-            return resolve_unary(expr->unary.op, operand);
-        case TOKEN_BIN_NOT:
-            if (!is_integer_type(operand.type)) {
-                fatal_error(expr->location, "Can only use ~ with integer type");
-            }
-            return resolve_unary(expr->unary.op, operand);
-        default:
-            assert(0);
-            break;
-    }
+    if (expr->unary.op == TOKEN_BIN_AND) {
+        ResolvedExpression operand = resolve_expression(expr->unary.operand);
+        if (!operand.is_lvalue) {
+            fatal_error(expr->location, "Can't take address of non-lvalue");
+        }
+        return resolved_rvalue(type_pointer(operand.type));
+    } else {
+        ResolvedExpression operand = resolve_expression_decayed(expr->unary.operand);
+        switch (expr->unary.op) {
+            case TOKEN_MUL:
+                if (operand.type->kind != TYPE_POINTER) {
+                    fatal_error(expr->location, "Can't dereference non pointer type");
+                }
+                return resolved_lvalue(operand.type->base);
+            case TOKEN_ADD:
+            case TOKEN_SUB:
+                if (!is_math_type(operand.type)) {
+                    fatal_error(expr->location, "Can only use unary %s with mathematics type",
+                                token_kind_names[expr->unary.op]);
+                }
+                return resolve_unary(expr->unary.op, operand);
+            case TOKEN_BIN_NOT:
+                if (!is_integer_type(operand.type)) {
+                    fatal_error(expr->location, "Can only use ~ with integer type");
+                }
+                return resolve_unary(expr->unary.op, operand);
+            default:
+                assert(0);
+                break;
+        }
 
-    return (ResolvedExpression){0};
+        return (ResolvedExpression) {0};
+    }
 }
 
 ResolvedExpression resolve_binary(TokenKind op, ResolvedExpression left, ResolvedExpression right) {
@@ -1023,14 +1047,14 @@ ResolvedExpression resolve_expression_binary(Expression *expr) {
                 promote_expression(&left);
                 promote_expression(&right);
                 if (issigned(left.type)) {
-                    convert_expression(&left, type_llong);
-                    convert_expression(&right, type_llong);
+                    cast_expression(&left, type_llong);
+                    cast_expression(&right, type_llong);
                 } else {
-                    convert_expression(&left, type_ullong);
-                    convert_expression(&right, type_ullong);
+                    cast_expression(&left, type_ullong);
+                    cast_expression(&right, type_ullong);
                 }
                 ResolvedExpression result = resolve_binary(expr->binary.op, left, right);
-                convert_expression(&result, left.type);
+                cast_expression(&result, left.type);
                 return result;
             } else  {
                 fatal_error(expr->location, "Invalid types of operands of %s", token_kind_names[expr->binary.op]);
@@ -1043,7 +1067,7 @@ ResolvedExpression resolve_expression_binary(Expression *expr) {
         case TOKEN_NOTEQ:
             if (is_math_type(left.type) && is_math_type(right.type)) {
                 ResolvedExpression result = resolve_binary_math(expr->binary.op, left, right);
-                convert_expression(&result, type_int);
+                cast_expression(&result, type_int);
                 return result;
             } else if (left.type->kind == TYPE_POINTER && right.type->kind == TYPE_POINTER) {
                 if (left.type->base != right.type->base) {
@@ -1159,7 +1183,7 @@ ResolvedExpression resolve_expression_compound(Expression *expr, Type *expected_
                 if (!is_integer_type(tmp_indx.type)) {
                     fatal_error(field.location, "Field initializer index must have integer type");
                 }
-                if (!convert_expression(&tmp_indx, type_int)) {
+                if (!cast_expression(&tmp_indx, type_int)) {
                     fatal_error(field.location, "Illegal conversion in initializer index");
                 }
                 if (tmp_indx.val.i < 0) {
@@ -1201,12 +1225,15 @@ ResolvedExpression resolve_expression_call(Expression *expr) {
 
     if (expr->call.operand->kind == EXPR_NAME) {
         Entity *entity = resolve_entity_name(expr->call.operand->name);
+        if (!entity) {
+            fatal_error(expr->location, "Name does not exists");
+        }
         if (entity->kind == ENTITY_TYPE) {
             if (expr->call.num_args != 1) {
                 fatal_error(expr->location, "Type conversion is invalid, operator takes 1 argument");
             }
             ResolvedExpression operand = resolve_expression_decayed(expr->call.args[0]);
-            if (!convert_expression(&operand, entity->type)) {
+            if (!cast_expression(&operand, entity->type)) {
                 fatal_error(expr->location, "Invalid type conversion");
             }
             return operand;
@@ -1232,7 +1259,7 @@ ResolvedExpression resolve_expression_call(Expression *expr) {
         Type *param = func.type->func.args[i];
         ResolvedExpression arg = resolve_expression_decayed_expected_type(expr->call.args[i], param);
         if (!convert_expression(&arg, param)) {
-            fatal_error(expr->call.args[i]->location, "Call argument expression typespec doesn't match expected typespec");
+            fatal_error(expr->call.args[i]->location, "Call argument expression type doesn't match expected type");
         }
     }
 
@@ -1281,7 +1308,7 @@ ResolvedExpression resolve_expression_index(Expression *expr) {
 ResolvedExpression resolve_expression_cast(Expression *expr) {
     Type *type = resolve_typespec(expr->cast.typespec);
     ResolvedExpression result = resolve_expression_decayed(expr->cast.expr);
-    if (!convert_expression(&result, type)) {
+    if (!cast_expression(&result, type)) {
         fatal_error(expr->location, "Illegal conversion");
     }
     return result;
@@ -1511,7 +1538,7 @@ Type* resolve_typespec(Typespec *typespec) {
                 if (!is_integer_type(size_expr.type)) {
                     fatal_error(typespec->location, "Array size must definition by integer");
                 }
-                convert_expression(&size_expr, type_int);
+                cast_expression(&size_expr, type_int);
                 size = size_expr.val.i;
                 if (size < 0) {
                     fatal_error(typespec->location, "Negative array size");
