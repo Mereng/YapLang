@@ -1323,51 +1323,130 @@ ResolvedExpression resolve_expression_cast(Expression *expr) {
     return result;
 }
 
+ResolvedExpression resolve_expression_int(Expression *expr) {
+    unsigned long long val = expr->int_lit.val;
+    ResolvedExpression operand = resolved_const(type_ullong, (Value) {.ull = val});
+    Type *type = type_ullong;
+
+    if (expr->int_lit.mod == TOKENMOD_NONE) {
+        bool overflow = false;
+        switch (expr->int_lit.suffix) {
+            case TOKENSUFFIX_NONE:
+                type = type_int;
+                if (val > INT_MAX) {
+                    type = type_long;
+                    if (val > LONG_MAX) {
+                        type = type_llong;
+                        overflow = val > LLONG_MAX;
+                    }
+                }
+                break;
+            case TOKENSUFFIX_U:
+                type = type_uint;
+                if (val > UINT_MAX) {
+                    type = type_ulong;
+                    if (val > ULONG_MAX) {
+                        type = type_ullong;
+                    }
+                }
+                break;
+            case TOKENSUFFIX_L:
+                type = type_long;
+                if (val > LONG_MAX) {
+                    type = type_llong;
+                    overflow = val > LLONG_MAX;
+                }
+                break;
+            case TOKENSUFFIX_UL:
+                type = type_ulong;
+                if (val > ULONG_MAX) {
+                    type = type_ullong;
+                }
+                break;
+            case TOKENSUFFIX_LL:
+                type = type_llong;
+                overflow = val > LLONG_MAX;
+                break;
+            case TOKENSUFFIX_ULL:
+                type = type_ullong;
+                break;
+            default:
+                assert(0);
+                break;
+        }
+        if (overflow) {
+            fatal_error(expr->location, "Integer literal is overflow");
+        }
+    } else {
+        switch (expr->int_lit.suffix) {
+            case TOKENSUFFIX_NONE:
+                type = type_int;
+                if (val > INT_MAX) {
+                    type = type_uint;
+                    if (val > UINT_MAX) {
+                        type = type_long;
+                        if (val > LONG_MAX) {
+                            type = type_ulong;
+                            if (val > ULONG_MAX) {
+                                type = type_llong;
+                                if (val > LLONG_MAX) {
+                                    type = type_ullong;
+                                }
+                            }
+                        }
+                    }
+                }
+                break;
+            case TOKENSUFFIX_U:
+                type = type_uint;
+                if (val > UINT_MAX) {
+                    type = type_ulong;
+                    if (val > ULONG_MAX) {
+                        type = type_ullong;
+                    }
+                }
+                break;
+            case TOKENSUFFIX_L:
+                type = type_long;
+                if (val > LONG_MAX) {
+                    type = type_ulong;
+                    if (val > ULONG_MAX) {
+                        type = type_llong;
+                        if (val > LLONG_MAX) {
+                            type = type_ullong;
+                        }
+                    }
+                }
+                break;
+            case TOKENSUFFIX_UL:
+                type = type_ulong;
+                if (val > ULONG_MAX) {
+                    type = type_ullong;
+                }
+                break;
+            case TOKENSUFFIX_LL:
+                type = type_llong;
+                if (val > ULLONG_MAX) {
+                    type = type_ullong;
+                }
+                break;
+            case TOKENSUFFIX_ULL:
+                type = type_ullong;
+                break;
+            default:
+                assert(0);
+                break;
+        }
+    }
+    cast_expression(&operand, type);
+    return operand;
+}
+
 ResolvedExpression resolve_expression_expected_type(Expression *expr, Type *expected_type) {
     ResolvedExpression resolved;
     switch (expr->kind) {
         case EXPR_INT:
-            switch (expr->int_lit.suffix) {
-                case TOKENSUFFIX_NONE:
-                    if (expr->int_lit.val > INT_MAX) {
-                        fatal_error(expr->location, "Out of range int literal");
-                    }
-                    resolved = resolved_const(type_int, (Value) {.i = (int)expr->int_lit.val});
-                    break;
-                case TOKENSUFFIX_U:
-                    if (expr->int_lit.val > UINT_MAX) {
-                        fatal_error(expr->location, "Out of range uint literal");
-                    }
-                    resolved = resolved_const(type_uint, (Value) {.ui = (unsigned int)expr->int_lit.val});
-                    break;
-                case TOKENSUFFIX_L:
-                    if (expr->int_lit.val > LONG_MAX) {
-                        fatal_error(expr->location, "Out of range long literal");
-                    }
-                    resolved = resolved_const(type_long, (Value) {.l = (long)expr->int_lit.val});
-                    break;
-                case TOKENSUFFIX_UL:
-                    if (expr->int_lit.val > ULONG_MAX) {
-                        fatal_error(expr->location, "Out of range ulong literal");
-                    }
-                    resolved = resolved_const(type_ulong, (Value) {.ul = (unsigned long)expr->int_lit.val});
-                    break;
-                case TOKENSUFFIX_LL:
-                    if (expr->int_lit.val > LLONG_MAX) {
-                        fatal_error(expr->location, "Out of range llong literal");
-                    }
-                    resolved = resolved_const(type_llong, (Value) {.ll = (long long)expr->int_lit.val});
-                    break;
-                case TOKENSUFFIX_ULL:
-                    if (expr->int_lit.val > ULLONG_MAX) {
-                        fatal_error(expr->location, "Out of range ullong literal");
-                    }
-                    resolved = resolved_const(type_ullong, (Value) {.ull = (unsigned long long)expr->int_lit.val});
-                    break;
-                default:
-                    assert(0);
-                    break;
-            }
+            resolved = resolve_expression_int(expr);
             break;
         case EXPR_FLOAT:
             resolved = resolved_const(expr->float_lit.suffix == TOKENSUFFIX_D ? type_double : type_float, (Value) {0});

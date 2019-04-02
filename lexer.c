@@ -179,7 +179,7 @@ void parse_int() {
         }
 
         if (digit >= base) {
-            syntax_error("Digit '%c' out of range for base %" PRIu64, *stream, base);
+            syntax_error("Digit '%c' out of range for base %d", *stream, base);
             digit = 0;
         }
 
