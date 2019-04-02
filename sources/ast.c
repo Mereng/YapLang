@@ -1,6 +1,7 @@
 #include <malloc.h>
 #include <memory.h>
 #include <inttypes.h>
+#include <ast.h>
 
 #include "ast.h"
 #include "aalloc.h"
@@ -145,14 +146,17 @@ Expression* expression_new(ExpressionKind kind, SrcLocation loc) {
     expr->location = loc;
     return expr;
 }
-Expression* expression_int(int int_val, SrcLocation loc) {
+Expression* expression_int(unsigned long long int_val, TokenSuffix suffix, TokenMod mod, SrcLocation loc) {
     Expression *expr = expression_new(EXPR_INT, loc);
-    expr->int_val = int_val;
+    expr->int_lit.val = int_val;
+    expr->int_lit.suffix = suffix;
+    expr->int_lit.mod = mod;
     return expr;
 }
-Expression* expression_float(double float_val, SrcLocation loc) {
+Expression* expression_float(double float_val, TokenSuffix suffix, SrcLocation loc) {
     Expression *expr = expression_new(EXPR_FLOAT, loc);
-    expr->float_val = float_val;
+    expr->float_lit.val = float_val;
+    expr->float_lit.suffix = suffix;
     return expr;
 }
 Expression* expression_str(const char *str_val, SrcLocation loc) {

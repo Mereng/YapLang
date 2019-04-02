@@ -305,8 +305,15 @@ struct Expression {
     ExpressionKind kind;
     Type *type;
     union {
-        int int_val;
-        double float_val;
+        struct {
+            TokenSuffix suffix;
+            TokenMod mod;
+            unsigned long long val;
+        } int_lit;
+        struct {
+            TokenSuffix suffix;
+            double val;
+        } float_lit;
         const char *str_val;
         const char *name;
         struct {
@@ -352,8 +359,8 @@ struct Expression {
 };
 
 Expression* expression_new(ExpressionKind kind, SrcLocation loc);
-Expression* expression_int(int int_val, SrcLocation loc);
-Expression* expression_float(double float_val, SrcLocation loc);
+Expression* expression_int(unsigned long long int_val, TokenSuffix suffix, TokenMod mod, SrcLocation loc);
+Expression* expression_float(double float_val, TokenSuffix suffix, SrcLocation loc);
 Expression* expression_str(const char *str_val, SrcLocation loc);
 Expression* expression_name(const char *name, SrcLocation loc);
 Expression* expression_cast(Typespec *cast_type, Expression *cast_expr, SrcLocation loc);

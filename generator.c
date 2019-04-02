@@ -1,3 +1,5 @@
+#include <ast.h>
+
 char *gen_buf = NULL;
 int gen_indent = 0;
 SrcLocation gen_location;
@@ -120,24 +122,44 @@ char* typespec_to_cdecl(Typespec *typespec, const char *str) {
 
 
 char char_to_escape[256] = {
-    ['\n'] = 'n',
-    ['\\'] = '\\',
-    ['"'] = '"',
-    ['\''] = '\''
+        ['\0'] = '0',
+        ['\n'] = 'n',
+        ['\r'] = 'r',
+        ['\t'] = 't',
+        ['\v'] = 'v',
+        ['\b'] = 'b',
+        ['\a'] = 'a',
+        ['\\'] = '\\',
+        ['"'] = '"',
+        ['\''] = '\''
 };
+
+void generate_char(char c) {
+    if (char_to_escape[(unsigned char)c]) {
+        genf("'\\%c'", char_to_escape[(unsigned char)c]);
+    } else if (isprint(c)) {
+        genf("'%c'", c);
+    } else {
+        genf("'\\x%x'", c);
+    }
+}
 
 void generate_string(const char *str) {
     genf("\"");
     while (*str) {
         const char *start = str;
-        while (*str && !char_to_escape[*(unsigned char*)str]) {
+        while (*str && isprint(*str) && !char_to_escape[*(unsigned char*)str]) {
             str++;
         }
         if (start != str) {
             genf("%.*s", str - start, start);
         }
-        if (*str && char_to_escape[*(unsigned char*)str]) {
-            genf("\\%c", char_to_escape[*(unsigned char*)str]);
+        if (*str) {
+            if (char_to_escape[*(unsigned char*)str]) {
+                genf("\\%c", char_to_escape[*(unsigned char *) str]);
+            } else {
+                genf("\\x%x", *str);
+            }
             str++;
         }
     }
@@ -188,11 +210,27 @@ void generate_expression_compound(Expression *expr, bool is_auto_assign) {
 
 void generate_expression(Expression *expr) {
     switch (expr->kind) {
-        case EXPR_INT:
-            genf("%"PRId32, expr->int_val);
+        case EXPR_INT: {
+            const char *suffix = token_suffix_name[expr->int_lit.suffix];
+            switch (expr->int_lit.mod) {
+                case TOKENMOD_BIN:
+                case TOKENMOD_HEX:
+                    genf("0x%llx%s", expr->int_lit.val, suffix);
+                    break;
+                case TOKENMOD_OCT:
+                    genf("0%llo%s", expr->int_lit.val, suffix);
+                    break;
+                case TOKENMOD_CHAR:
+                    generate_char((char)expr->int_lit.val);
+                    break;
+                default:
+                    genf("%llu%s", expr->int_lit.val, suffix);
+                    break;
+            }
             break;
+        }
         case EXPR_FLOAT:
-            genf("%ff", expr->float_val);
+            genf("%f%s", expr->float_lit.val, expr->float_lit.suffix == TOKENSUFFIX_D ? "" : "f");
             break;
         case EXPR_STR:
             generate_string(expr->str_val);

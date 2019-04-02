@@ -116,6 +116,16 @@ const char *token_kind_names[] = {
         [TOKEN_ELLIPSIS] = "...",
 };
 
+const char *token_suffix_name[] = {
+        [TOKENSUFFIX_NONE] = "",
+        [TOKENSUFFIX_D] = "d",
+        [TOKENSUFFIX_U] = "u",
+        [TOKENSUFFIX_L] = "l",
+        [TOKENSUFFIX_UL] = "ul",
+        [TOKENSUFFIX_LL] = "ll",
+        [TOKENSUFFIX_ULL] = "ull"
+};
+
 uint8_t char_to_digit[] = {
         ['0'] = 0,
         ['1'] = 1,
@@ -159,7 +169,7 @@ void parse_int() {
             token.mod = TOKENMOD_OCT;
         }
     }
-    int val = 0;
+    unsigned long long val = 0;
 
     for (;;) {
         int digit = char_to_digit[*stream];
@@ -173,7 +183,7 @@ void parse_int() {
             digit = 0;
         }
 
-        if (val > (INT_MAX - digit) / base) {
+        if (val > (ULLONG_MAX - digit) / base) {
             syntax_error("Integer literal is overflow overflow");
             while (isdigit(*stream)) {
                 stream++;
@@ -187,6 +197,26 @@ void parse_int() {
 
     token.kind = TOKEN_INT;
     token.int_val = val;
+
+    if (tolower(*stream) == 'u') {
+        token.suffix = TOKENSUFFIX_U;
+        stream++;
+        if (tolower(*stream) == 'l') {
+            token.suffix = TOKENSUFFIX_L;
+            stream++;
+            if (tolower(*stream) == 'l') {
+                token.suffix = TOKENSUFFIX_ULL;
+                stream++;
+            }
+        }
+    } else if (tolower(*stream) == 'l') {
+        token.suffix = TOKENSUFFIX_L;
+        stream++;
+        if (tolower(*stream) == 'l') {
+            token.suffix = TOKENSUFFIX_LL;
+            stream++;
+        }
+    }
 }
 
 void parse_float() {
@@ -225,6 +255,10 @@ void parse_float() {
 
     token.kind = TOKEN_FLOAT;
     token.float_val = val;
+    if (tolower(*stream) == 'd') {
+        token.suffix = TOKENSUFFIX_D;
+        stream++;
+    }
 }
 
 char escape_to_char[] = {
@@ -334,6 +368,7 @@ void next_token() {
     top:
     token.start = stream;
     token.mod = 0;
+    token.suffix = 0;
     switch (*stream) {
         case ' ': case '\n': case '\t': case '\r': case '\v':
             while (isspace(*stream)) {

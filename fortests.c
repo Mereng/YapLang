@@ -48,10 +48,10 @@ void print_type(Typespec *type) {
 void print_expression(Expression *expr) {
     switch (expr->kind) {
         case EXPR_INT:
-            printf("%"PRIu64, expr->int_val);
+            printf("%"PRIu64, expr->int_lit.val);
             break;
         case EXPR_FLOAT:
-            printf("%f", expr->float_val);
+            printf("%f", expr->float_lit.val);
             break;
         case EXPR_STR:
             printf("\"%s\"", expr->str_val);

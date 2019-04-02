@@ -69,13 +69,24 @@ typedef enum TokenMod {
     TOKENMOD_CHAR
 } TokenMod;
 
+typedef enum TokenSuffix {
+    TOKENSUFFIX_NONE,
+    TOKENSUFFIX_D,
+    TOKENSUFFIX_U,
+    TOKENSUFFIX_L,
+    TOKENSUFFIX_UL,
+    TOKENSUFFIX_LL,
+    TOKENSUFFIX_ULL,
+} TokenSuffix;
+
 typedef struct Token {
     TokenKind kind;
     TokenMod mod;
+    TokenSuffix suffix;
     const char *start;
     const char *end;
     union {
-        int int_val;
+        unsigned long long int_val;
         double float_val;
         const char *name;
         const char *str_val;

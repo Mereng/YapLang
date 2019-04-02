@@ -44,13 +44,16 @@ Expression* parse_expression_compound(Typespec *type) {
 
 Expression* parse_expression_operand() {
     if (is_token(TOKEN_INT)) {
-        int val = token.int_val;
+        unsigned long long val = token.int_val;
+        TokenSuffix suffix = token.suffix;
+        TokenMod mod = token.mod;
         next_token();
-        return expression_int(val, token.location);
+        return expression_int(val, suffix, mod, token.location);
     } else if (is_token(TOKEN_FLOAT)) {
         double val = token.float_val;
+        TokenSuffix suffix = token.suffix;
         next_token();
-        return expression_float(val, token.location);
+        return expression_float(val, suffix, token.location);
     } else if (is_token(TOKEN_STR)) {
         const char *val = token.str_val;
         next_token();

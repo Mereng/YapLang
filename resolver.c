@@ -517,9 +517,6 @@ void complete_type(Type *type) {
 
     for (AggregateItem *it = decl->aggregate.items; it != decl->aggregate.items + decl->aggregate.num_items; it++) {
         Type *item_type = resolve_typespec(it->type);
-        if (item_type->kind == TYPE_CONST) {
-            fatal_error(it->location, "Field can't be const");
-        }
         complete_type(item_type);
         for (const char **name = it->names; name != it->names + it->num_names; name++) {
             buf_push(fields, ((TypeField){*name, item_type}));
@@ -1083,7 +1080,19 @@ ResolvedExpression resolve_expression_binary(Expression *expr) {
         case TOKEN_AND:
         case TOKEN_OR:
             if (is_scalar_type(left.type) && is_scalar_type(right.type)) {
-                return resolved_rvalue(type_int);
+                if (left.is_const && right.is_const) {
+                    cast_expression(&left, type_bool);
+                    cast_expression(&right, type_bool);
+                    int r;
+                    if (expr->binary.op == TOKEN_AND) {
+                        r = left.val.b && right.val.b;
+                    } else {
+                        r = left.val.b || right.val.b;
+                    }
+                    return resolved_const(type_int, (Value) {.i = r});
+                } else {
+                    return resolved_rvalue(type_int);
+                }
             } else {
                 fatal_error(expr->location, "Invalid types of operands of %s", token_kind_names[expr->binary.op]);
             }
@@ -1299,7 +1308,7 @@ ResolvedExpression resolve_expression_index(Expression *expr) {
     }
     ResolvedExpression index = resolve_expression(expr->index.index);
 
-    if (index.type->kind != TYPE_INT) {
+    if (!is_integer_type(index.type)) {
         fatal_error(expr->location, "Index must have typespec int");
     }
     return resolved_lvalue(operand.type->base);
@@ -1318,10 +1327,50 @@ ResolvedExpression resolve_expression_expected_type(Expression *expr, Type *expe
     ResolvedExpression resolved;
     switch (expr->kind) {
         case EXPR_INT:
-            resolved = resolved_const(type_int, (Value){.i = expr->int_val});
+            switch (expr->int_lit.suffix) {
+                case TOKENSUFFIX_NONE:
+                    if (expr->int_lit.val > INT_MAX) {
+                        fatal_error(expr->location, "Out of range int literal");
+                    }
+                    resolved = resolved_const(type_int, (Value) {.i = (int)expr->int_lit.val});
+                    break;
+                case TOKENSUFFIX_U:
+                    if (expr->int_lit.val > UINT_MAX) {
+                        fatal_error(expr->location, "Out of range uint literal");
+                    }
+                    resolved = resolved_const(type_uint, (Value) {.ui = (unsigned int)expr->int_lit.val});
+                    break;
+                case TOKENSUFFIX_L:
+                    if (expr->int_lit.val > LONG_MAX) {
+                        fatal_error(expr->location, "Out of range long literal");
+                    }
+                    resolved = resolved_const(type_long, (Value) {.l = (long)expr->int_lit.val});
+                    break;
+                case TOKENSUFFIX_UL:
+                    if (expr->int_lit.val > ULONG_MAX) {
+                        fatal_error(expr->location, "Out of range ulong literal");
+                    }
+                    resolved = resolved_const(type_ulong, (Value) {.ul = (unsigned long)expr->int_lit.val});
+                    break;
+                case TOKENSUFFIX_LL:
+                    if (expr->int_lit.val > LLONG_MAX) {
+                        fatal_error(expr->location, "Out of range llong literal");
+                    }
+                    resolved = resolved_const(type_llong, (Value) {.ll = (long long)expr->int_lit.val});
+                    break;
+                case TOKENSUFFIX_ULL:
+                    if (expr->int_lit.val > ULLONG_MAX) {
+                        fatal_error(expr->location, "Out of range ullong literal");
+                    }
+                    resolved = resolved_const(type_ullong, (Value) {.ull = (unsigned long long)expr->int_lit.val});
+                    break;
+                default:
+                    assert(0);
+                    break;
+            }
             break;
         case EXPR_FLOAT:
-            resolved = resolved_const(type_float, (Value) {0});
+            resolved = resolved_const(expr->float_lit.suffix == TOKENSUFFIX_D ? type_double : type_float, (Value) {0});
             break;
         case EXPR_STR:
             resolved = resolved_rvalue(type_pointer(type_const(type_char)));
