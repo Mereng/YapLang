@@ -86,7 +86,13 @@ bool is_convertible(ResolvedExpression *operand, Type *dest) {
     } else if (is_math_type(dest) && is_math_type(src)) {
         return true;
     } else if (dest->kind == TYPE_POINTER && src->kind == TYPE_POINTER) {
-        return dest->base == type_void || src->base == type_void;
+        dest = base_type(dest->base);
+        src = src->base;
+        if (dest == type_void) {
+            return src->kind != TYPE_CONST;
+        } else {
+            return src == dest || src == type_void;
+        }
     } else if (is_null_pointer(*operand) && dest->kind == TYPE_POINTER) {
         return true;
     }
@@ -1549,15 +1555,18 @@ void resolve_statement_auto_assign(Statement *stmt) {
         if (stmt->auto_assign.init) {
             Type *expected = base_type(type);
             ResolvedExpression expr = resolve_expression_expected_type(stmt->auto_assign.init, expected);
-            if (!(type->kind == TYPE_ARRAY && expr.type->kind == TYPE_ARRAY && type->base == expr.type->base &&
-                type->num_elements == 0)) {
-                if (!convert_expression(&expr, expected)) {
-                    fatal_error(stmt->location, "Initialization expression not expected type");
-                }
+            if (type->kind == TYPE_ARRAY && expr.type->kind == TYPE_ARRAY && type->base == expr.type->base &&
+                !type->num_elements) {
+                type = expr.type;
+            } else if (!convert_expression(&expr, expected)) {
+                fatal_error(stmt->location, "Initialization expression not expected type");
             }
         }
     } else {
         type = base_type(resolve_expression(stmt->auto_assign.init).type);
+    }
+    if (type->size == 0) {
+        fatal_error(stmt->location, "Declaration can't have size 0");
     }
     if (!local_entities_push_var(stmt->auto_assign.name, type)) {
         fatal_error(stmt->location, "Duplicate definition");
@@ -1623,6 +1632,9 @@ bool resolve_statement(Statement *stmt, Type *ret_type) {
             ResolvedExpression left = resolve_expression(stmt->assign.left);
             if (!left.is_lvalue) {
                 fatal_error(stmt->location, "Can't assign to non-lvalue");
+            }
+            if (left.type->kind == TYPE_ARRAY) {
+                fatal_error(stmt->location, "Can't assign to array");
             }
             if (left.type->is_nonmodify) {
                 fatal_error(stmt->location, "lvalue has non-modifiable type");
@@ -1704,11 +1716,18 @@ Type* resolve_typespec(Typespec *typespec) {
         case TYPESPEC_FUNC: {
             Type **args = NULL;
             for (Typespec **it = typespec->func.args; it != typespec->func.args + typespec->func.num_args; it++) {
+                Type *arg = resolve_typespec(*it);
+                if (arg == type_void) {
+                    fatal_error(typespec->location, "Function parameter can't have type void");
+                }
                 buf_push(args, resolve_typespec(*it));
             }
             Type *ret = type_void;
             if (typespec->func.ret) {
                 ret = resolve_typespec(typespec->func.ret);
+            }
+            if (ret->kind == TYPE_ARRAY) {
+                fatal_error(typespec->location, "Function return type can't be array");
             }
             type = type_func(args, buf_len(args), ret, typespec->func.is_variadic);
             break;
@@ -1748,6 +1767,9 @@ Type* resolve_declaration_var(Declaration *decl) {
     }
 
     complete_type(type);
+    if (type->size == 0) {
+        fatal_error(decl->location, "Declaration can't have size 0");
+    }
     return type;
 }
 
@@ -1763,12 +1785,23 @@ Type* resolve_declaration_const(Declaration *decl, Value *val) {
 Type* resolve_declaration_func(Declaration *decl) {
     Type **params = NULL;
     for (FuncParam *it = decl->func.params; it != decl->func.params + decl->func.num_params; it++) {
-        buf_push(params, resolve_typespec(it->type));
+        Type *param = resolve_typespec(it->type);
+        complete_type(param);
+        if (param == type_void) {
+            fatal_error(decl->location, "Function parameter can't be void");
+        }
+        buf_push(params, param);
     }
     Type *ret = type_void;
     if (decl->func.return_type) {
         ret = resolve_typespec(decl->func.return_type);
+        complete_type(ret);
     }
+
+    if (ret->kind == TYPE_ARRAY) {
+        fatal_error(decl->location, "Function return type can't be array ");
+    }
+
     return type_func(params, buf_len(params), ret, decl->func.is_variadic);
 }
 
@@ -1776,7 +1809,11 @@ void resolve_func(Entity *entity) {
     Entity *entities = local_scope_enter();
     for (size_t i = 0; i < entity->decl->func.num_params; i++) {
         FuncParam param = entity->decl->func.params[i];
-        local_entities_push_var(param.name, resolve_typespec(param.type));
+        Type *param_type = resolve_typespec(param.type);
+        if (param_type->kind == TYPE_ARRAY) {
+            param_type = type_pointer(param_type->base);
+        }
+        local_entities_push_var(param.name, param_type);
     }
     Type *ret = resolve_typespec(entity->decl->func.return_type);
     bool returns = resolve_statement_block(entity->decl->func.body, ret);

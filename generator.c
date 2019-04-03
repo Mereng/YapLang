@@ -48,7 +48,11 @@ void generate_expression(Expression *expr);
 char* type_to_cdecl(Type *type, const char *str) {
     switch (type->kind) {
         case TYPE_ARRAY:
-            return type_to_cdecl(type->base, cdecl_paren(stringf("%s[%"PRIu64"]", str, type->num_elements), *str));
+            if (type->num_elements == 0) {
+                return type_to_cdecl(type->base, cdecl_paren(stringf("%s[]", str), *str));
+            } else {
+                return type_to_cdecl(type->base, cdecl_paren(stringf("%s[%zu]", str, type->num_elements), *str));
+            }
         case TYPE_POINTER:
             return type_to_cdecl(type->base, cdecl_paren(stringf("*%s", str), *str));
         case TYPE_CONST:
@@ -81,12 +85,16 @@ char* typespec_to_cdecl(Typespec *typespec, const char *str) {
         case TYPESPEC_NAME:
             return stringf("%s%s%s", typespec->name, *str ? " ": "", str);
         case TYPESPEC_ARRAY: {
-            char *tmp_buf = gen_buf;
-            gen_buf = NULL;
-            generate_expression(typespec->size);
-            char *r = typespec_to_cdecl(typespec->base, cdecl_paren(stringf("%s[%s]", str, gen_buf), *str));
-            gen_buf = tmp_buf;
-            return r;
+            if (typespec->size == 0) {
+                return typespec_to_cdecl(typespec->base, cdecl_paren(stringf("%s[]", str), *str));
+            } else {
+                char *tmp_buf = gen_buf;
+                gen_buf = NULL;
+                generate_expression(typespec->size);
+                char *r = typespec_to_cdecl(typespec->base, cdecl_paren(stringf("%s[%s]", str, gen_buf), *str));
+                gen_buf = tmp_buf;
+                return r;
+            }
         }
         case TYPESPEC_POINTER:
             return typespec_to_cdecl(typespec->base, cdecl_paren(stringf("*%s", str), *str));
@@ -531,7 +539,7 @@ void generate_aggregate(Declaration *decl) {
     genlnf("};");
 }
 
-bool is_array_type_incomplete(Typespec *typespec) {
+bool is_array_typespec_incomplete(Typespec *typespec) {
     return typespec->kind == TYPESPEC_ARRAY && !typespec->size;
 }
 
@@ -548,7 +556,7 @@ void generate_declaration(Entity *entity) {
             genf(")");
             break;
         case DECL_VAR:
-            if (decl->var.type && !is_array_type_incomplete(decl->var.type)) {
+            if (decl->var.type && !is_array_typespec_incomplete(decl->var.type)) {
                 genlnf("%s", typespec_to_cdecl(decl->var.type, entity->name));
             } else {
                 genlnf("%s", type_to_cdecl(entity->type, entity->name));
