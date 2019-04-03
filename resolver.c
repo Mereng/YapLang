@@ -226,7 +226,7 @@ Value convert_const_expression(Type *src, Type *dest, Value val) {
 }
 
 bool is_null_pointer(ResolvedExpression operand) {
-    if (operand.is_const && (operand.type->kind == TYPE_POINTER || is_math_type(operand.type))) {
+    if (operand.is_const && (operand.type->kind == TYPE_POINTER || is_integer_type(operand.type))) {
         cast_expression(&operand, type_ullong);
         return operand.val.ull == 0;
     } else {
@@ -1272,6 +1272,9 @@ ResolvedExpression resolve_expression_call(Expression *expr) {
 
     for (size_t i = 0; i < num_args; i++) {
         Type *param = func.type->func.args[i];
+        if (param->kind == TYPE_ARRAY) {
+            param = type_pointer(param->base);
+        }
         ResolvedExpression arg = resolve_expression_decayed_expected_type(expr->call.args[i], param);
         if (!convert_expression(&arg, param)) {
             fatal_error(expr->call.args[i]->location, "Call argument expression type doesn't match expected type");
