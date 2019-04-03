@@ -330,8 +330,20 @@ void generate_simple_statement(Statement *stmt) {
             generate_expression(stmt->expr);
             break;
         case STMT_AUTO_ASSIGN:
-            genf("%s = ", type_to_cdecl(base_type(stmt->auto_assign.init->type), stmt->auto_assign.name));
-            generate_init_expression(stmt->auto_assign.init);
+            if (stmt->auto_assign.type) {
+                if (stmt->auto_assign.type->kind == TYPESPEC_ARRAY && !stmt->auto_assign.type->size) {
+                    genf("%s", type_to_cdecl(stmt->auto_assign.init->type, stmt->auto_assign.name));
+                } else {
+                    genf("%s", typespec_to_cdecl(stmt->auto_assign.type, stmt->auto_assign.name));
+                }
+                if (stmt->auto_assign.init) {
+                    genf(" = ");
+                    generate_init_expression(stmt->auto_assign.init);
+                }
+            } else {
+                genf("%s = ", type_to_cdecl(base_type(stmt->auto_assign.init->type), stmt->auto_assign.name));
+                generate_init_expression(stmt->auto_assign.init);
+            }
             break;
         case STMT_ASSIGN:
             generate_expression(stmt->assign.left);

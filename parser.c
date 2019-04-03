@@ -296,22 +296,33 @@ StatementBlock parse_statement_block() {
 
 Statement* parse_statement_simple() {
     Expression *expr = parse_expression();
+    SrcLocation loc = expr->location;
     Statement *stmt;
     if (match_token(TOKEN_AUTO_ASSIGN)) {
         if (expr->kind != EXPR_NAME) {
             fatal_syntax("operator := must be preceded by a name");
         }
-        stmt = statement_auto_assign(expr->name, parse_expression(), expr->location);
+        stmt = statement_auto_assign(expr->name, NULL, parse_expression(), loc);
+    } else if (match_token(TOKEN_COLON)) {
+        if (expr->kind != EXPR_NAME) {
+            fatal_syntax("operator = must be preceded by a name");
+        }
+        Typespec *type = parse_type();
+        Expression *init = NULL;
+        if (match_token(TOKEN_ASSIGN)) {
+            init = parse_expression();
+        }
+        stmt = statement_auto_assign(expr->name, type, init, loc);
     } else if (TOKEN_START_ASSIGN <= token.kind && token.kind <= TOKEN_END_ASSIGN) {
         TokenKind op = token.kind;
         next_token();
-        stmt = statement_assign(op, expr, parse_expression(), expr->location);
+        stmt = statement_assign(op, expr, parse_expression(), loc);
     } else if (is_token(TOKEN_INC) || is_token(TOKEN_DEC)) {
         TokenKind op = token.kind;
         next_token();
-        stmt = statement_assign(op, expr, NULL, expr->location);
+        stmt = statement_assign(op, expr, NULL, loc);
     } else {
-        stmt = statement_expr(expr, expr->location);
+        stmt = statement_expr(expr, loc);
     }
     return stmt;
 }
@@ -441,10 +452,6 @@ Statement* parse_statement() {
     } else if (is_token(TOKEN_LBRACE)) {
         return statement_block(parse_statement_block(), location);
     } else {
-        Declaration *d = try_parse_declaration();
-        if (d) {
-            return statement_decl(d, location);
-        }
         Statement *stmt = parse_statement_simple();
         expect_token(TOKEN_SEMICOLON);
         return stmt;
@@ -503,30 +510,36 @@ Declaration* parse_declaration_aggregate(DeclarationKind kind, SrcLocation locat
 Declaration* parse_declaration_var(SrcLocation location) {
     const char *name = parse_name();
     if (match_token(TOKEN_ASSIGN)) {
-        return declaration_var(name, NULL, parse_expression(), location);
+        Expression *expr = parse_expression();
+        expect_token(TOKEN_SEMICOLON);
+        return declaration_var(name, NULL, expr, location);
     } else if (match_token(TOKEN_COLON)) {
         Typespec *type = parse_type();
         Expression *expr = NULL;
         if (match_token(TOKEN_ASSIGN)) {
             expr = parse_expression();
         }
+        expect_token(TOKEN_SEMICOLON);
         return declaration_var(name, type, expr, location);
     } else {
         fatal_syntax("Expected : or = after var, got %s", token_str(token));
-        return NULL;
     }
 }
 
 Declaration* parse_declaration_const(SrcLocation location) {
     const char *name = parse_name();
     expect_token(TOKEN_ASSIGN);
-    return declaration_const(name, parse_expression(), location);
+    Expression *expr = parse_expression();
+    expect_token(TOKEN_SEMICOLON);
+    return declaration_const(name, expr, location);
 }
 
 Declaration* parse_declaration_typedef(SrcLocation location) {
     const char *name = parse_name();
     expect_token(TOKEN_ASSIGN);
-    return declaration_typedef(name, parse_type(), location);
+    Typespec *type = parse_type();
+    expect_token(TOKEN_SEMICOLON);
+    return declaration_typedef(name, type, location);
 }
 
 FuncParam parse_declaration_func_param() {

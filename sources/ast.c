@@ -283,9 +283,10 @@ Statement* statement_assign(TokenKind op, Expression *left, Expression *right, S
     stmt->assign.right = right;
     return stmt;
 }
-Statement* statement_auto_assign(const char *name, Expression *init, SrcLocation loc) {
+Statement* statement_auto_assign(const char *name, Typespec *type, Expression *init, SrcLocation loc) {
     Statement *stmt = statement_new(STMT_AUTO_ASSIGN, loc);
     stmt->auto_assign.name = name;
+    stmt->auto_assign.type = type;
     stmt->auto_assign.init = init;
     return stmt;
 }

@@ -435,6 +435,7 @@ struct Statement {
         } assign;
         struct {
             const char *name;
+            Typespec *type;
             Expression *init;
         } auto_assign;
         StatementBlock block;
@@ -452,7 +453,7 @@ Statement* statement_while(Expression *cond, StatementBlock body, SrcLocation lo
 Statement* statement_do_while(Expression *cond, StatementBlock body, SrcLocation loc);
 Statement* statement_switch(Expression *expr, SwitchCase *cases, size_t num_cases, SrcLocation loc);
 Statement* statement_assign(TokenKind op, Expression *left, Expression *right, SrcLocation loc);
-Statement* statement_auto_assign(const char *name, Expression *init, SrcLocation loc);
+Statement* statement_auto_assign(const char *name, Typespec *type, Expression *init, SrcLocation loc);
 Statement* statement_return(Expression *expr, SrcLocation loc);
 Statement* statement_break(SrcLocation loc);
 Statement* statement_continue(SrcLocation loc);

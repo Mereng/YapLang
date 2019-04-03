@@ -1542,6 +1542,28 @@ bool resolve_statement_block(StatementBlock block, Type *ret_type) {
     return returns;
 }
 
+void resolve_statement_auto_assign(Statement *stmt) {
+    Type *type = NULL;
+    if (stmt->auto_assign.type) {
+        type = resolve_typespec(stmt->auto_assign.type);
+        if (stmt->auto_assign.init) {
+            Type *expected = base_type(type);
+            ResolvedExpression expr = resolve_expression_expected_type(stmt->auto_assign.init, expected);
+            if (!(type->kind == TYPE_ARRAY && expr.type->kind == TYPE_ARRAY && type->base == expr.type->base &&
+                type->num_elements == 0)) {
+                if (!convert_expression(&expr, expected)) {
+                    fatal_error(stmt->location, "Initialization expression not expected type");
+                }
+            }
+        }
+    } else {
+        type = base_type(resolve_expression(stmt->auto_assign.init).type);
+    }
+    if (!local_entities_push_var(stmt->auto_assign.name, type)) {
+        fatal_error(stmt->location, "Duplicate definition");
+    }
+}
+
 bool resolve_statement(Statement *stmt, Type *ret_type) {
     switch (stmt->kind) {
         case STMT_IF: {
@@ -1614,9 +1636,7 @@ bool resolve_statement(Statement *stmt, Type *ret_type) {
             return false;
         }
         case STMT_AUTO_ASSIGN:
-            if(!local_entities_push_var(stmt->auto_assign.name, base_type(resolve_expression(stmt->auto_assign.init).type))) {
-                fatal_error(stmt->location, "Duplicate definition");
-            }
+            resolve_statement_auto_assign(stmt);
             return false;
         case STMT_RETURN:
             if (stmt->expr) {
