@@ -54,7 +54,7 @@ void print_expression(Expression *expr) {
             printf("%f", expr->float_lit.val);
             break;
         case EXPR_STR:
-            printf("\"%s\"", expr->str_val);
+            printf("\"%s\"", expr->str_lit.val);
             break;
         case EXPR_NAME:
             printf("%s", expr->name);

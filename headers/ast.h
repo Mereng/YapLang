@@ -314,7 +314,10 @@ struct Expression {
             TokenSuffix suffix;
             double val;
         } float_lit;
-        const char *str_val;
+        struct {
+            const char *val;
+            TokenMod mod;
+        } str_lit;
         const char *name;
         struct {
             Typespec *type;
@@ -361,7 +364,7 @@ struct Expression {
 Expression* expression_new(ExpressionKind kind, SrcLocation loc);
 Expression* expression_int(unsigned long long int_val, TokenSuffix suffix, TokenMod mod, SrcLocation loc);
 Expression* expression_float(double float_val, TokenSuffix suffix, SrcLocation loc);
-Expression* expression_str(const char *str_val, SrcLocation loc);
+Expression* expression_str(const char *val, TokenMod mod, SrcLocation loc);
 Expression* expression_name(const char *name, SrcLocation loc);
 Expression* expression_cast(Typespec *cast_type, Expression *cast_expr, SrcLocation loc);
 Expression* expression_unary(TokenKind operator, Expression *operand, SrcLocation loc);

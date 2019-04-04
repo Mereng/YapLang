@@ -152,7 +152,11 @@ void generate_char(char c) {
     }
 }
 
-void generate_string(const char *str) {
+void generate_string(const char *str, bool multiline) {
+    if (multiline) {
+        gen_indent++;
+        genln();
+    }
     genf("\"");
     while (*str) {
         const char *start = str;
@@ -165,6 +169,10 @@ void generate_string(const char *str) {
         if (*str) {
             if (char_to_escape[*(unsigned char*)str]) {
                 genf("\\%c", char_to_escape[*(unsigned char *) str]);
+                if (str[0] == '\n' && str[1]) {
+                    genf("\"");
+                    genlnf("\"");
+                }
             } else {
                 genf("\\x%x", *str);
             }
@@ -172,6 +180,9 @@ void generate_string(const char *str) {
         }
     }
     genf("\"");
+    if (multiline) {
+        gen_indent--;
+    }
 }
 
 void generate_sync_location(SrcLocation location) {
@@ -179,7 +190,7 @@ void generate_sync_location(SrcLocation location) {
         genlnf("#line %d", location.line);
         if (gen_location.name != location.name) {
             genf(" ");
-            generate_string(location.name);
+            generate_string(location.name, false);
         }
         gen_location = location;
     }
@@ -241,7 +252,7 @@ void generate_expression(Expression *expr) {
             genf("%f%s", expr->float_lit.val, expr->float_lit.suffix == TOKENSUFFIX_D ? "" : "f");
             break;
         case EXPR_STR:
-            generate_string(expr->str_val);
+            generate_string(expr->str_lit.val, expr->str_lit.mod == TOKENMOD_MULTILINE);
             break;
         case EXPR_NAME:
             genf("%s", expr->name);

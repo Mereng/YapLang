@@ -86,12 +86,17 @@ bool is_convertible(ResolvedExpression *operand, Type *dest) {
     } else if (is_math_type(dest) && is_math_type(src)) {
         return true;
     } else if (dest->kind == TYPE_POINTER && src->kind == TYPE_POINTER) {
-        dest = base_type(dest->base);
-        src = src->base;
-        if (dest == type_void) {
-            return src->kind != TYPE_CONST;
+        if (dest->base->kind == TYPE_CONST && src->base->kind == TYPE_CONST) {
+            return dest->base->base == src->base->base || dest->base->base == type_void || src->base->base == type_void;
         } else {
-            return src == dest || src == type_void;
+            Type *unqual_dest_base = base_type(dest->base);
+            if (unqual_dest_base == src->base) {
+                return true;
+            } else if (unqual_dest_base == type_void) {
+                return dest->base->kind == TYPE_CONST || src->base->kind != TYPE_CONST;
+            } else {
+                return src->base == type_void;
+            }
         }
     } else if (is_null_pointer(*operand) && dest->kind == TYPE_POINTER) {
         return true;
@@ -104,9 +109,9 @@ bool is_castable(ResolvedExpression *operand, Type *dest) {
     Type *src = operand->type;
     if (is_convertible(operand, dest)) {
         return true;
-    } else if (is_math_type(dest)) {
+    } else if (is_integer_type(dest)) {
         return src->kind == TYPE_POINTER;
-    } else if (is_math_type(src)) {
+    } else if (is_integer_type(src)) {
         return dest->kind == TYPE_POINTER;
     } else if (dest->kind == TYPE_POINTER && src->kind == TYPE_POINTER) {
         return true;

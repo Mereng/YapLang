@@ -66,7 +66,8 @@ typedef enum TokenMod {
     TOKENMOD_HEX,
     TOKENMOD_BIN,
     TOKENMOD_OCT,
-    TOKENMOD_CHAR
+    TOKENMOD_CHAR,
+    TOKENMOD_MULTILINE
 } TokenMod;
 
 typedef enum TokenSuffix {

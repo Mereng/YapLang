@@ -159,9 +159,10 @@ Expression* expression_float(double float_val, TokenSuffix suffix, SrcLocation l
     expr->float_lit.suffix = suffix;
     return expr;
 }
-Expression* expression_str(const char *str_val, SrcLocation loc) {
+Expression* expression_str(const char *val, TokenMod mod, SrcLocation loc) {
     Expression *expr = expression_new(EXPR_STR, loc);
-    expr->str_val = str_val;
+    expr->str_lit.val = val;
+    expr->str_lit.mod = mod;
     return expr;
 }
 Expression* expression_name(const char *name, SrcLocation loc) {

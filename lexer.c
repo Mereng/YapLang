@@ -306,27 +306,45 @@ void parse_str() {
     assert(*stream == '"');
     char *str_buf = NULL;
     stream++;
-    while (*stream && *stream != '"') {
-        char val = *stream;
-        if (val == '\n') {
-            syntax_error("String literal can not contain new line");
-        } else if (val == '\\') {
-            stream++;
-            val = escape_to_char[*stream];
-            if (val == 0 && *stream != '0') {
-                syntax_error("Invalid string literal escape '\\%c", *stream);
+    if (stream[0] == '"' && stream[1] == '"') {
+        stream += 2;
+        while (*stream) {
+            if (stream[0] == '"' && stream[1] == '"' && stream[2] == '"') {
+                stream += 3;
+                break;
             }
+            if (*stream != '\r') {
+                buf_push(str_buf, *stream);
+            }
+            stream++;
+        }
+        if (!*stream) {
+            syntax_error("Unexpected end of file");
+        }
+        token.mod = TOKENMOD_MULTILINE;
+    } else {
+        while (*stream && *stream != '"') {
+            char val = *stream;
+            if (val == '\n') {
+                syntax_error("String literal can not contain new line");
+            } else if (val == '\\') {
+                stream++;
+                val = escape_to_char[*stream];
+                if (val == 0 && *stream != '0') {
+                    syntax_error("Invalid string literal escape '\\%c", *stream);
+                }
+            }
+
+            buf_push(str_buf, val);
+            stream++;
         }
 
-        buf_push(str_buf, val);
-        stream++;
-    }
-
-    if (*stream) {
-        assert(*stream == '"');
-        stream++;
-    } else {
-        syntax_error("Unexpected end of file within string literal");
+        if (*stream) {
+            assert(*stream == '"');
+            stream++;
+        } else {
+            syntax_error("Unexpected end of file within string literal");
+        }
     }
 
     buf_push(str_buf, 0);

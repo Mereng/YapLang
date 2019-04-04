@@ -56,8 +56,9 @@ Expression* parse_expression_operand() {
         return expression_float(val, suffix, token.location);
     } else if (is_token(TOKEN_STR)) {
         const char *val = token.str_val;
+        TokenMod mod = token.mod;
         next_token();
-        return expression_str(val, token.location);
+        return expression_str(val, mod, token.location);
     } else if (is_token(TOKEN_NAME)) {
         const char *name = token.name;
         next_token();
