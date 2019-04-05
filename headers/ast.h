@@ -93,6 +93,7 @@ typedef enum TypeKind {
     TYPE_ULONG,
     TYPE_LLONG,
     TYPE_ULLONG,
+    TYPE_ENUM,
     TYPE_FLOAT,
     TYPE_DOUBLE,
     TYPE_POINTER,

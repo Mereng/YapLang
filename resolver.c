@@ -61,7 +61,7 @@ ResolvedExpression resolved_decay(ResolvedExpression operand) {
 }
 
 bool is_integer_type(Type *type) {
-    return TYPE_CHAR <= type->kind && type->kind <= TYPE_ULLONG;
+    return TYPE_CHAR <= type->kind && type->kind <= TYPE_ENUM;
 }
 
 bool is_floating_type(Type *type) {
@@ -359,6 +359,14 @@ Type* type_incomplete(Entity *entity) {
     return type;
 }
 
+Type* type_enum(Entity *entity) {
+    Type *type = type_new(TYPE_ENUM);
+    type->entity = entity;
+    type->size = type_int->size;
+    type->align = type_int->align;
+    return type;
+}
+
 Type* base_type(Type *type) {
     if (type->kind == TYPE_CONST) {
         return type->base;
@@ -629,15 +637,28 @@ void local_scope_leave(Entity *ptr_end) {
     local_entities_end = ptr_end;
 }
 
+void entity_append_const(const char *name, Type *type, Value val) {
+    Entity *entity = entity_new(ENTITY_CONST, str_intern(name), NULL);
+    entity->state = ENTITY_RESOLVED;
+    entity->type = type;
+    entity->val = val;
+    global_entities_put(entity);
+}
+
 Entity* entity_append_declaration(Declaration *declaration) {
     Entity *entity = entity_declaration(declaration);
     global_entities_put(entity);
-
     declaration->entity = entity;
     if (declaration->kind == DECL_ENUM) {
+        entity->state = ENTITY_RESOLVED;
+        entity->type = type_enum(entity);
+        buf_push(entities_ordered, entity);
         for (size_t i = 0; i < declaration->enum_delc.num_items; i++) {
-            Entity *entity_const = entity_enum_const(declaration->enum_delc.items[i].name, declaration);
-            global_entities_put(entity_const);
+            EnumItem item = declaration->enum_delc.items[i];
+            if (item.init) {
+                fatal_error(item.location, "Enum constant initializers are not currently supported");
+            }
+            entity_append_const(item.name, entity->type, (Value) {.i = i});
         }
     }
     return entity;
@@ -655,14 +676,6 @@ void entity_append_func(const char *name, Type *type) {
     Entity *entity = entity_new(ENTITY_FUNC, str_intern(name), NULL);
     entity->state = ENTITY_RESOLVED;
     entity->type = type;
-    global_entities_put(entity);
-}
-
-void entity_append_const(const char *name, Type *type, Value val) {
-    Entity *entity = entity_new(ENTITY_CONST, str_intern(name), NULL);
-    entity->state = ENTITY_RESOLVED;
-    entity->type = type;
-    entity->val = val;
     global_entities_put(entity);
 }
 

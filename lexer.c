@@ -316,6 +316,9 @@ void parse_str() {
             if (*stream != '\r') {
                 buf_push(str_buf, *stream);
             }
+            if (*stream == '\n') {
+                token.location.line++;
+            }
             stream++;
         }
         if (!*stream) {

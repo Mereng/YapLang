@@ -524,11 +524,8 @@ void generate_forward_declarations() {
             case DECL_UNION:
                 genlnf("typedef union %s %s;", entity->name, entity->name);
                 break;
-            case DECL_FUNC:
-                if (get_declaration_attribute(decl, keywords.foreign) == NULL) {
-                    generate_func_declaration(decl);
-                    genf(";");
-                }
+            case DECL_ENUM:
+                genlnf("typedef enum %s %s;", entity->name, entity->name);
                 break;
             default:
                 break;
@@ -545,6 +542,16 @@ void generate_aggregate(Declaration *decl) {
             generate_sync_location(item.location);
             genlnf("%s;", typespec_to_cdecl(item.type, item.names[j]));
         }
+    }
+    gen_indent--;
+    genlnf("};");
+}
+
+void generate_enum(Declaration *decl) {
+    genlnf("enum %s {", decl->name);
+    gen_indent++;
+    for (size_t i = 0; i < decl->enum_delc.num_items; i++) {
+        genlnf("%s,", decl->enum_delc.items[i].name);
     }
     gen_indent--;
     genlnf("};");
@@ -580,8 +587,7 @@ void generate_declaration(Entity *entity) {
             break;
         case DECL_FUNC:
             generate_func_declaration(decl);
-            genf(" ");
-            generate_statement_block(decl->func.body);
+            genf(";");
             break;
         case DECL_STRUCT:
         case DECL_UNION:
@@ -589,6 +595,9 @@ void generate_declaration(Entity *entity) {
             break;
         case DECL_TYPEDEF:
             genlnf("typedef %s;", typespec_to_cdecl(decl->typedef_decl.type, entity->name));
+            break;
+        case DECL_ENUM:
+            generate_enum(decl);
             break;
         default:
             assert(0);
@@ -602,10 +611,24 @@ void generate_ordered_entities() {
     }
 }
 
+void generate_func_definitions() {
+    for (Entity **it = global_entities_buf; it != buf_end(global_entities_buf); it++) {
+        Entity *entity = *it;
+        Declaration *decl = entity->decl;
+        if (decl && decl->kind == DECL_FUNC && !get_declaration_attribute(decl, keywords.foreign)) {
+            generate_func_declaration(decl);
+            genf(" ");
+            generate_statement_block(decl->func.body);
+            genln();
+        }
+    }
+}
+
 void generate_c_code() {
     gen_buf = NULL;
     genf("%s", gen_init);
     generate_forward_declarations();
     genln();
     generate_ordered_entities();
+    generate_func_definitions();
 }
