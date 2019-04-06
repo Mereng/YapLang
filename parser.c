@@ -127,7 +127,8 @@ Expression* parse_expression_base() {
 }
 
 Expression* parse_expression_unary() {
-    if (is_token(TOKEN_ADD) || is_token(TOKEN_SUB) || is_token(TOKEN_MUL) || is_token(TOKEN_BIN_AND) || is_token(TOKEN_BIN_NOT)) {
+    if (is_token(TOKEN_ADD) || is_token(TOKEN_SUB) || is_token(TOKEN_MUL) || is_token(TOKEN_BIN_AND) || is_token(TOKEN_BIN_NOT) ||
+        is_token(TOKEN_NOT)) {
         TokenKind op = token.kind;
         next_token();
         return expression_unary(op, parse_expression_unary(), token.location);

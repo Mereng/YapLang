@@ -516,16 +516,15 @@ void generate_forward_declarations() {
         if (!decl) {
             continue;
         }
-
+        if (!get_declaration_attribute(decl, keywords.foreign)) {
+            continue;
+        }
         switch (decl->kind) {
             case DECL_STRUCT:
                 genlnf("typedef struct %s %s;", entity->name, entity->name);
                 break;
             case DECL_UNION:
                 genlnf("typedef union %s %s;", entity->name, entity->name);
-                break;
-            case DECL_ENUM:
-                genlnf("typedef enum %s %s;", entity->name, entity->name);
                 break;
             default:
                 break;
@@ -548,13 +547,13 @@ void generate_aggregate(Declaration *decl) {
 }
 
 void generate_enum(Declaration *decl) {
-    genlnf("enum %s {", decl->name);
+    genlnf("typedef enum %s {", decl->name);
     gen_indent++;
     for (size_t i = 0; i < decl->enum_delc.num_items; i++) {
         genlnf("%s,", decl->enum_delc.items[i].name);
     }
     gen_indent--;
-    genlnf("};");
+    genlnf("} %s;", decl->name);
 }
 
 bool is_array_typespec_incomplete(Typespec *typespec) {

@@ -160,11 +160,7 @@ bool is_castable(ResolvedExpression *operand, Type *dest) {
                 operand->val.ull = (unsigned long long)operand->val.t; \
                 break; \
             case TYPE_POINTER: \
-                if (operand->type->kind == TYPE_POINTER || is_null_pointer(*operand)) { \
-                    operand->val.p = (uintptr_t)operand->val.t; \
-                } else { \
-                    operand->is_const = false; \
-                } \
+                operand->val.p = (uintptr_t)operand->val.t; \
                 break; \
             case TYPE_FLOAT: \
             case TYPE_DOUBLE: \
@@ -994,6 +990,11 @@ ResolvedExpression resolve_expression_unary(Expression *expr) {
                     fatal_error(expr->location, "Can only use ~ with integer type");
                 }
                 return resolve_unary(expr->unary.op, operand);
+            case TOKEN_NOT:
+                if (!is_scalar_type(operand.type)) {
+                    fatal_error(expr->location, "Can only use ! with scalar type");
+                }
+                return resolve_unary(expr->unary.op, operand);
             default:
                 assert(0);
                 break;
@@ -1016,51 +1017,48 @@ ResolvedExpression resolve_binary_math(TokenKind op, ResolvedExpression left, Re
     return resolve_binary(op, left, right);
 }
 
-ResolvedExpression resolve_expression_binary(Expression *expr) {
-    ResolvedExpression left = resolve_expression_decayed(expr->binary.left);
-    ResolvedExpression right = resolve_expression_decayed(expr->binary.right);
-    switch (expr->binary.op) {
+ResolvedExpression resolve_expression_binary_op(TokenKind op, const char *name,
+        ResolvedExpression left, ResolvedExpression right, SrcLocation loc) {
+    switch (op) {
         case TOKEN_MUL:
         case TOKEN_DIV:
             if (!is_math_type(left.type)) {
-                fatal_error(expr->location, "Left operand of %s must have mathematics type",
-                        token_kind_names[expr->binary.op]);
+                fatal_error(loc, "Left operand of %s must have mathematics type", name);
             }
             if (!is_math_type(right.type)) {
-                fatal_error(expr->location, "Right operand of %s must have mathematics type",
-                            token_kind_names[expr->binary.op]);
+                fatal_error(loc, "Right operand of %s must have mathematics type", name);
             }
-            return resolve_binary_math(expr->binary.op, left, right);
+            return resolve_binary_math(op, left, right);
         case TOKEN_MOD:
             if (!is_integer_type(left.type)) {
-                fatal_error(expr->binary.left->location, "Left operand of %% must have integer type");
+                fatal_error(loc, "Left operand of %% must have integer type");
             }
             if (!is_integer_type(right.type)) {
-                fatal_error(expr->binary.right->location, "Right operand of %% must have integer type");
+                fatal_error(loc, "Right operand of %% must have integer type");
             }
-            return resolve_binary_math(expr->binary.op, left, right);
+            return resolve_binary_math(op, left, right);
         case TOKEN_ADD:
             if (is_math_type(left.type) && is_math_type(right.type)) {
-                return resolve_binary_math(expr->binary.op, left, right);
+                return resolve_binary_math(op, left, right);
             } else if (left.type->kind == TYPE_POINTER && is_integer_type(right.type)) {
                 return resolved_rvalue(left.type);
             } else if (right.type->kind == TYPE_POINTER && is_integer_type(left.type)) {
                 return resolved_rvalue(right.type);
             } else {
-                fatal_error(expr->location, "Invalid types of operands of +");
+                fatal_error(loc, "Invalid types of operands of +");
             }
         case TOKEN_SUB:
             if (is_math_type(left.type) && is_math_type(right.type)) {
-                return resolve_binary_math(expr->binary.op, left, right);
+                return resolve_binary_math(op, left, right);
             } else if (left.type->kind == TYPE_POINTER && is_integer_type(right.type)) {
                 return resolved_rvalue(left.type);
             } else if (left.type->kind == TYPE_POINTER && right.type->kind == TYPE_POINTER) {
                 if (left.type->base != right.type->base) {
-                    fatal_error(expr->location, "Can't subtract different pointers");
+                    fatal_error(loc, "Can't subtract different pointers");
                 }
                 return resolved_rvalue(type_size);
             } else {
-                fatal_error(expr->location, "Invalid types of operands of -");
+                fatal_error(loc, "Invalid types of operands of -");
             }
         case TOKEN_LSHIFT:
         case TOKEN_RSHIFT:
@@ -1074,11 +1072,11 @@ ResolvedExpression resolve_expression_binary(Expression *expr) {
                     cast_expression(&left, type_ullong);
                     cast_expression(&right, type_ullong);
                 }
-                ResolvedExpression result = resolve_binary(expr->binary.op, left, right);
+                ResolvedExpression result = resolve_binary(op, left, right);
                 cast_expression(&result, left.type);
                 return result;
             } else  {
-                fatal_error(expr->location, "Invalid types of operands of %s", token_kind_names[expr->binary.op]);
+                fatal_error(loc, "Invalid types of operands of %s", name);
             }
         case TOKEN_LT:
         case TOKEN_LTEQ:
@@ -1087,19 +1085,19 @@ ResolvedExpression resolve_expression_binary(Expression *expr) {
         case TOKEN_EQ:
         case TOKEN_NOTEQ:
             if (is_math_type(left.type) && is_math_type(right.type)) {
-                ResolvedExpression result = resolve_binary_math(expr->binary.op, left, right);
+                ResolvedExpression result = resolve_binary_math(op, left, right);
                 cast_expression(&result, type_int);
                 return result;
             } else if (left.type->kind == TYPE_POINTER && right.type->kind == TYPE_POINTER) {
                 if (left.type->base != right.type->base) {
-                    fatal_error(expr->location, "Can't compare different pointer")
+                    fatal_error(loc, "Can't compare different pointer")
                 }
                 return resolved_rvalue(type_int);
             } else if ((is_null_pointer(left) && right.type->kind == TYPE_POINTER) ||
-                            (is_null_pointer(right) && left.type->kind == TYPE_POINTER)) {
+                       (is_null_pointer(right) && left.type->kind == TYPE_POINTER)) {
                 return resolved_rvalue(type_int);
             } else {
-                fatal_error(expr->location, "Invalid types of operands of %s", token_kind_names[expr->binary.op]);
+                fatal_error(loc, "Invalid types of operands of %s", name);
             }
         case TOKEN_AND:
         case TOKEN_OR:
@@ -1108,7 +1106,7 @@ ResolvedExpression resolve_expression_binary(Expression *expr) {
                     cast_expression(&left, type_bool);
                     cast_expression(&right, type_bool);
                     int r;
-                    if (expr->binary.op == TOKEN_AND) {
+                    if (op == TOKEN_AND) {
                         r = left.val.b && right.val.b;
                     } else {
                         r = left.val.b || right.val.b;
@@ -1118,15 +1116,15 @@ ResolvedExpression resolve_expression_binary(Expression *expr) {
                     return resolved_rvalue(type_int);
                 }
             } else {
-                fatal_error(expr->location, "Invalid types of operands of %s", token_kind_names[expr->binary.op]);
+                fatal_error(loc, "Invalid types of operands of %s", name);
             }
         case TOKEN_BIN_AND:
         case TOKEN_BIN_OR:
         case TOKEN_XOR:
             if (is_integer_type(left.type) && is_integer_type(right.type)) {
-                return resolve_binary_math(expr->binary.op, left, right);
+                return resolve_binary_math(op, left, right);
             } else {
-                fatal_error(expr->location, "Invalid types of operands of %s", token_kind_names[expr->binary.op]);
+                fatal_error(loc, "Invalid types of operands of %s", name);
             }
         default:
             assert(0);
@@ -1134,6 +1132,12 @@ ResolvedExpression resolve_expression_binary(Expression *expr) {
     }
 
     return (ResolvedExpression){0};
+}
+
+ResolvedExpression resolve_expression_binary(Expression *expr) {
+    ResolvedExpression left = resolve_expression_decayed(expr->binary.left);
+    ResolvedExpression right = resolve_expression_decayed(expr->binary.right);
+    return resolve_expression_binary_op(expr->binary.op, token_kind_names[expr->binary.op], left, right, expr->location);
 }
 
 ResolvedExpression resolve_expression_field(Expression *expr) {
@@ -1491,10 +1495,18 @@ ResolvedExpression resolve_expression_expected_type(Expression *expr, Type *expe
             resolved = resolve_expression_binary(expr);
             break;
         case EXPR_SIZEOF_EXPR: {
-            ResolvedExpression result = resolve_expression(expr->size_of_expr);
-            Type *type = result.type;
-            complete_type(type);
-            resolved = resolved_const(type_usize, (Value){.ull = type->size});
+            if (expr->size_of_expr->kind == EXPR_NAME) {
+                Entity *entity = resolve_entity_name(expr->size_of_expr->name);
+                if (entity && entity->kind == ENTITY_TYPE) {
+                    complete_type(entity->type);
+                    resolved = resolved_const(type_usize, (Value) {.ull = entity->type->size});
+                }
+            } else {
+                ResolvedExpression result = resolve_expression(expr->size_of_expr);
+                Type *type = result.type;
+                complete_type(type);
+                resolved = resolved_const(type_usize, (Value) {.ull = type->size});
+            }
             break;
         }
         case EXPR_SIZEOF_TYPE: {
@@ -1594,6 +1606,45 @@ void resolve_statement_auto_assign(Statement *stmt) {
     }
 }
 
+void resolve_statement_assign(Statement *stmt) {
+    ResolvedExpression left = resolve_expression(stmt->assign.left);
+    if (!left.is_lvalue) {
+        fatal_error(stmt->location, "Can't assign to non-lvalue");
+    }
+    if (left.type->kind == TYPE_ARRAY) {
+        fatal_error(stmt->location, "Can't assign to array");
+    }
+    if (left.type->is_nonmodify) {
+        fatal_error(stmt->location, "lvalue has non-modifiable type");
+    }
+    if (stmt->assign.right) {
+        const char *op_name = token_kind_names[stmt->assign.op];
+        TokenKind op_binary = map_assign_token_binary_token[stmt->assign.op];
+        ResolvedExpression right = resolve_expression_decayed_expected_type(stmt->assign.right, left.type);
+        ResolvedExpression result;
+        if (stmt->assign.op == TOKEN_ASSIGN) {
+            result = right;
+        } else if (stmt->assign.op == TOKEN_ADD_ASSIGN || stmt->assign.op == TOKEN_SUB_ASSIGN){
+            if (left.type->kind == TYPE_POINTER && is_integer_type(right.type)) {
+                result = resolved_rvalue(left.type);
+            } else if (is_math_type(left.type) && is_math_type(right.type)) {
+                result = resolve_expression_binary_op(op_binary, op_name, left, right, stmt->location);
+            } else {
+                fatal_error(stmt->location, "Invalid operand types for %s", op_name);
+            }
+        } else {
+            result = resolve_expression_binary_op(op_binary, op_name, left, right, stmt->location);
+        }
+        if (!convert_expression(&result, left.type)) {
+            fatal_error(stmt->location, "Illegal conversion right to left operand");
+        }
+    } else {
+        if (!(is_integer_type(left.type) || left.type->kind == TYPE_POINTER)) {
+            fatal_error(stmt->location, "%s can only used with integer or pointer types", stmt->assign.op)
+        }
+    }
+}
+
 bool resolve_statement(Statement *stmt, Type *ret_type) {
     switch (stmt->kind) {
         case STMT_IF: {
@@ -1650,22 +1701,7 @@ bool resolve_statement(Statement *stmt, Type *ret_type) {
             return returns && has_default;
         }
         case STMT_ASSIGN: {
-            ResolvedExpression left = resolve_expression(stmt->assign.left);
-            if (!left.is_lvalue) {
-                fatal_error(stmt->location, "Can't assign to non-lvalue");
-            }
-            if (left.type->kind == TYPE_ARRAY) {
-                fatal_error(stmt->location, "Can't assign to array");
-            }
-            if (left.type->is_nonmodify) {
-                fatal_error(stmt->location, "lvalue has non-modifiable type");
-            }
-            if (stmt->assign.right) {
-                ResolvedExpression right = resolve_expression_decayed_expected_type(stmt->assign.right, left.type);
-                if (!convert_expression(&right, left.type)) {
-                    fatal_error(stmt->location, "Illegal conversion right to left operand");
-                }
-            }
+            resolve_statement_assign(stmt);
             return false;
         }
         case STMT_AUTO_ASSIGN:
@@ -1796,8 +1832,8 @@ Type* resolve_declaration_var(Declaration *decl) {
 
 Type* resolve_declaration_const(Declaration *decl, Value *val) {
     ResolvedExpression result = resolve_const_expression(decl->const_decl.expr);
-    if (!is_math_type(result.type)) {
-        fatal_error(decl->location, "Const must have mathematics type");
+    if (!is_scalar_type(result.type)) {
+        fatal_error(decl->location, "Const must have scalar type");
     }
     *val = result.val;
     return result.type;
@@ -1906,6 +1942,7 @@ void complete_entities() {
 
 void init_entities() {
     entity_append_type("void", type_void);
+    entity_append_type("bool", type_bool);
     entity_append_type("char", type_char);
     entity_append_type("schar", type_schar);
     entity_append_type("uchar", type_uchar);

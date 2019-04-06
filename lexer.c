@@ -126,6 +126,19 @@ const char *token_suffix_name[] = {
         [TOKENSUFFIX_ULL] = "ull"
 };
 
+TokenKind map_assign_token_binary_token[] = {
+        [TOKEN_ADD_ASSIGN] = TOKEN_ADD,
+        [TOKEN_SUB_ASSIGN] = TOKEN_SUB,
+        [TOKEN_MUL_ASSIGN] = TOKEN_MUL,
+        [TOKEN_DIV_ASSIGN] = TOKEN_DIV,
+        [TOKEN_MOD_ASSIGN] = TOKEN_MOD,
+        [TOKEN_LSHIFT_ASSIGN] = TOKEN_LSHIFT,
+        [TOKEN_RSHIFT_ASSIGN] = TOKEN_RSHIFT,
+        [TOKEN_OR_ASSIGN] = TOKEN_OR,
+        [TOKEN_XOR_ASSIGN] = TOKEN_XOR,
+        [TOKEN_AND_ASSIGN] = TOKEN_AND,
+};
+
 uint8_t char_to_digit[] = {
         ['0'] = 0,
         ['1'] = 1,
@@ -564,7 +577,6 @@ static inline bool expect_token(TokenKind kind) {
         return true;
     } else {
         fatal_syntax("expected token %s, got %s", token_kind_names[kind], token_str(token));
-        return false;
     }
 }
 
