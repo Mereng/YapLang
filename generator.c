@@ -4,9 +4,9 @@ char *gen_buf = NULL;
 int gen_indent = 0;
 SrcLocation gen_location;
 
-const char *gen_init = "#include <stdio.h>\n"
-                       "#include <stdbool.h>\n"
-                       "#include <math.h>\n"
+const char **gen_header_buf;
+
+const char *gen_init = "#include <stdbool.h>\n"
                        "typedef signed char schar;\n"
                        "typedef unsigned char uchar;\n"
                        "typedef unsigned short ushort;\n"
@@ -516,7 +516,7 @@ void generate_forward_declarations() {
         if (!decl) {
             continue;
         }
-        if (!get_declaration_attribute(decl, keywords.foreign)) {
+        if (get_declaration_attribute(decl, keywords.foreign)) {
             continue;
         }
         switch (decl->kind) {
@@ -569,7 +569,13 @@ void generate_declaration(Entity *entity) {
     switch (decl->kind) {
         case DECL_CONST:
             genlnf("#define %s (", entity->name);
+            if (decl->const_decl.type) {
+                genf("(%s)(", typespec_to_cdecl(decl->const_decl.type, ""));
+            }
             generate_expression(decl->const_decl.expr);
+            if (decl->const_decl.type) {
+                genf(")");
+            }
             genf(")");
             break;
         case DECL_VAR:
@@ -615,6 +621,9 @@ void generate_func_definitions() {
         Entity *entity = *it;
         Declaration *decl = entity->decl;
         if (decl && decl->kind == DECL_FUNC && !get_declaration_attribute(decl, keywords.foreign)) {
+            if (decl->func.is_incomplete) {
+                fatal_error(decl->location, "Incomplete function not allowed");
+            }
             generate_func_declaration(decl);
             genf(" ");
             generate_statement_block(decl->func.body);
@@ -623,8 +632,43 @@ void generate_func_definitions() {
     }
 }
 
+void generate_headers() {
+    const char *import_name = str_intern("import");
+    for (size_t i = 0; i < global_declaration_list->num_declarations; i++) {
+        Declaration *decl = global_declaration_list->declarations[i];
+        if (decl->kind != DECL_ATTRIBUTE) {
+            continue;
+        }
+        Attribute attr = decl->attribute;
+        if (attr.name == keywords.foreign) {
+            for (size_t j = 0; j < attr.num_args; j++) {
+                if (attr.args[j].name != import_name) {
+                    continue;
+                }
+                Expression *expr = attr.args[j].expr;
+                if (expr->kind != EXPR_STR) {
+                    fatal_error(decl->location, "#foreign import' arguments must be string");
+                }
+                const char *header = expr->name;
+                bool found = false;
+                for (const char **it = gen_header_buf; it != buf_end(gen_header_buf); it++) {
+                    if (*it == header) {
+                        found = true;
+                    }
+                }
+                if (!found) {
+                    buf_push(gen_header_buf, header);
+                    genlnf("#include %s", header);
+                }
+            }
+        }
+    }
+}
+
 void generate_c_code() {
     gen_buf = NULL;
+    generate_headers();
+    genln();
     genf("%s", gen_init);
     generate_forward_declarations();
     genln();

@@ -132,8 +132,16 @@ struct Type {
 
 Type *type_new(TypeKind kind);
 
+typedef struct AttributeArgument {
+    const char *name;
+    Expression *expr;
+    SrcLocation location;
+} AttributeArgument;
+
 typedef struct Attribute {
     const char *name;
+    AttributeArgument *args;
+    size_t num_args;
     SrcLocation location;
 } Attribute;
 
@@ -142,7 +150,7 @@ typedef struct AttributeList {
     size_t num_attributes;
 } AttributeList;
 
-
+Attribute attribute_new(const char *name, AttributeArgument *args, size_t num_args, SrcLocation location);
 
 enum TypespecKind {
     TYPESPEC_NONE,
@@ -190,7 +198,8 @@ enum DeclarationKind {
     DECL_VAR,
     DECL_CONST,
     DECL_TYPEDEF,
-    DECL_FUNC
+    DECL_FUNC,
+    DECL_ATTRIBUTE
 };
 
 struct EnumItem {
@@ -219,6 +228,7 @@ struct Declaration {
     const char *name;
     AttributeList attributes;
     union {
+        Attribute attribute;
         struct {
             EnumItem *items;
             size_t num_items;
@@ -232,6 +242,7 @@ struct Declaration {
             Expression *expr;
         } var;
         struct {
+            Typespec *type;
             Expression *expr;
         } const_decl;
         struct {
@@ -239,6 +250,7 @@ struct Declaration {
             size_t num_params;
             Typespec *return_type;
             bool is_variadic;
+            bool is_incomplete;
             StatementBlock body;
         } func;
         struct {
@@ -255,10 +267,11 @@ Declaration* declaration_union(const char *name, AggregateItem *items, size_t nu
 Declaration* declaration_aggregate(DeclarationKind kind, const char *name, AggregateItem *items, size_t num_items,
                                    SrcLocation loc);
 Declaration* declaration_var(const char *name, Typespec *type, Expression *expr, SrcLocation loc);
-Declaration* declaration_const(const char *name, Expression *expr, SrcLocation loc);
+Declaration* declaration_const(const char *name, Expression *expr, Typespec *type, SrcLocation loc);
 Declaration* declaration_func(const char *name, FuncParam *params, size_t num_params, Typespec *ret_type,
-                              bool is_variadic, StatementBlock body, SrcLocation loc);
+                              bool is_variadic, bool is_incomplete, StatementBlock body, SrcLocation loc);
 Declaration* declaration_typedef(const char *name, Typespec *type, SrcLocation loc);
+Declaration* declaration_attribute(Attribute attribute, SrcLocation loc);
 Attribute* get_declaration_attribute(Declaration *declaration, const char *name);
 
 struct DeclarationList {

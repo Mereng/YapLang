@@ -113,6 +113,7 @@ const char *token_kind_names[] = {
         [TOKEN_SEMICOLON] = ";",
         [TOKEN_QUESTION_MARK] = "?",
         [TOKEN_AT] = "@",
+        [TOKEN_POUND] = "#",
         [TOKEN_ELLIPSIS] = "...",
 };
 
@@ -509,6 +510,7 @@ void next_token() {
         CASE1(']', TOKEN_RBRACKET)
         CASE1(',', TOKEN_COMMA)
         CASE1('@', TOKEN_AT)
+        CASE1('#', TOKEN_POUND)
         CASE1(';', TOKEN_SEMICOLON)
         CASE1('?', TOKEN_QUESTION_MARK)
         CASE1('~', TOKEN_BIN_NOT)

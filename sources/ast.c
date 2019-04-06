@@ -29,6 +29,10 @@ Type *type_new(TypeKind kind) {
     return type;
 }
 
+Attribute attribute_new(const char *name, AttributeArgument *args, size_t num_args, SrcLocation location) {
+    return (Attribute) {.name = name, .args = args, .num_args = num_args, .location = location};
+}
+
 Typespec* typespec_new(TypespecKind kind, SrcLocation loc) {
     Typespec *typespec = ast_alloc(sizeof(Typespec));
     typespec->kind = kind;
@@ -103,18 +107,20 @@ Declaration* declaration_var(const char *name, Typespec *type, Expression *expr,
     decl->var.expr = expr;
     return decl;
 }
-Declaration* declaration_const(const char *name, Expression *expr, SrcLocation loc) {
+Declaration* declaration_const(const char *name, Expression *expr, Typespec *type, SrcLocation loc) {
     Declaration *decl = declaration_new(DECL_CONST, name, loc);
     decl->const_decl.expr = expr;
+    decl->const_decl.type = type;
     return decl;
 }
 Declaration* declaration_func(const char *name, FuncParam *params, size_t num_params, Typespec *ret_type,
-        bool is_variadic, StatementBlock body, SrcLocation loc) {
+        bool is_variadic, bool is_incomplete, StatementBlock body, SrcLocation loc) {
     Declaration *decl = declaration_new(DECL_FUNC, name, loc);
     decl->func.params = params;
     decl->func.num_params = num_params;
     decl->func.return_type = ret_type;
     decl->func.is_variadic = is_variadic;
+    decl->func.is_incomplete = is_incomplete;
     decl->func.body = body;
     return decl;
 }
@@ -123,6 +129,13 @@ Declaration* declaration_typedef(const char *name, Typespec *type, SrcLocation l
     decl->typedef_decl.type = type;
     return decl;
 }
+
+Declaration* declaration_attribute(Attribute attribute, SrcLocation loc) {
+    Declaration *decl = declaration_new(DECL_ATTRIBUTE, NULL, loc);
+    decl->attribute = attribute;
+    return decl;
+}
+
 Attribute* get_declaration_attribute(Declaration *declaration, const char *name) {
     for (size_t i = 0; i < declaration->attributes.num_attributes; i++) {
         Attribute *attr = declaration->attributes.attributes + i;

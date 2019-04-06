@@ -530,10 +530,14 @@ Declaration* parse_declaration_var(SrcLocation location) {
 
 Declaration* parse_declaration_const(SrcLocation location) {
     const char *name = parse_name();
+    Typespec *type = NULL;
+    if (match_token(TOKEN_COLON)) {
+        type = parse_type();
+    }
     expect_token(TOKEN_ASSIGN);
     Expression *expr = parse_expression();
     expect_token(TOKEN_SEMICOLON);
-    return declaration_const(name, expr, location);
+    return declaration_const(name, expr, type, location);
 }
 
 Declaration* parse_declaration_typedef(SrcLocation location) {
@@ -577,16 +581,56 @@ Declaration* parse_declaration_func(SrcLocation location) {
     if (match_token(TOKEN_COLON)) {
         ret = parse_type();
     }
-    StatementBlock block = parse_statement_block();
-    return declaration_func(name, ast_dup(params, buf_sizeof(params)), buf_len(params), ret, is_variadic, block, location);
+    StatementBlock block = {0};
+    bool is_incomplete = false;
+    if (is_token(TOKEN_LBRACE)) {
+        block = parse_statement_block();
+    } else {
+        expect_token(TOKEN_SEMICOLON);
+        is_incomplete = true;
+    }
+    return declaration_func(name, ast_dup(params, buf_sizeof(params)), buf_len(params), ret, is_variadic, is_incomplete,
+            block, location);
+}
+
+AttributeArgument parse_attribute_argument() {
+     SrcLocation loc = token.location;
+     Expression *expr = parse_expression();
+     const char *name = NULL;
+     if (match_token(TOKEN_ASSIGN)) {
+         if (expr->kind != EXPR_NAME) {
+             syntax_error("Left operand of = in attribute argument must be name");
+         }
+         name = expr->name;
+         expr = parse_expression();
+     }
+    return (AttributeArgument) {.location = loc, .name = name, .expr = expr};
+}
+
+Attribute parse_attribute() {
+    SrcLocation loc = token.location;
+    const char *name = parse_name();
+    AttributeArgument *args = NULL;
+    if (match_token(TOKEN_LPAREN)) {
+        buf_push(args, parse_attribute_argument());
+        while (match_token(TOKEN_COMMA)) {
+            buf_push(args, parse_attribute_argument());
+        }
+        expect_token(TOKEN_RPAREN);
+    }
+    return attribute_new(name, ast_dup(args, buf_sizeof(args)), buf_len(args), loc);
 }
 
 AttributeList parse_attribute_list() {
     Attribute *attrs = NULL;
     while (match_token(TOKEN_AT)) {
-        buf_push(attrs, ((Attribute){.location = token.location, .name = parse_name()}));
+        buf_push(attrs, parse_attribute());
     }
     return (AttributeList){ast_dup(attrs, buf_sizeof(attrs)), buf_len(attrs)};
+}
+
+Declaration* parse_declaration_attribute(SrcLocation loc) {
+    return declaration_attribute(parse_attribute(), loc);
 }
 
 Declaration* try_parse_declaration() {
@@ -604,6 +648,8 @@ Declaration* try_parse_declaration() {
         return parse_declaration_typedef(token.location);
     } else if (match_keyword(keywords.func_keyword)) {
         return parse_declaration_func(token.location);
+    } else if (match_token(TOKEN_POUND)) {
+        return parse_declaration_attribute(token.location);
     } else {
         return NULL;
     }

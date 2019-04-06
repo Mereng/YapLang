@@ -58,6 +58,7 @@ typedef enum TokenKind {
     TOKEN_SEMICOLON,
     TOKEN_QUESTION_MARK,
     TOKEN_AT,
+    TOKEN_POUND,
     TOKEN_ELLIPSIS
 } TokenKind;
 

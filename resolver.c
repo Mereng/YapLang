@@ -1,4 +1,5 @@
-#include <ast.h>
+
+DeclarationList *global_declaration_list;
 
 Type *type_void = &(Type){TYPE_VOID, 0};
 Type *type_char = &(Type){TYPE_CHAR, 1, 1};
@@ -1835,6 +1836,12 @@ Type* resolve_declaration_const(Declaration *decl, Value *val) {
     if (!is_scalar_type(result.type)) {
         fatal_error(decl->location, "Const must have scalar type");
     }
+    if (decl->const_decl.type) {
+        Type *type = resolve_typespec(decl->const_decl.type);
+        if (!convert_expression(&result, type)) {
+            fatal_error(decl->location, "Invalid type in constant");
+        }
+    }
     *val = result.val;
     return result.type;
 }
@@ -1863,6 +1870,9 @@ Type* resolve_declaration_func(Declaration *decl) {
 }
 
 void resolve_func(Entity *entity) {
+    if (entity->decl->func.is_incomplete) {
+        return;
+    }
     Entity *entities = local_scope_enter();
     for (size_t i = 0; i < entity->decl->func.num_params; i++) {
         FuncParam param = entity->decl->func.params[i];
@@ -1970,8 +1980,11 @@ void init_entities() {
     entity_append_const("NULL", type_pointer(type_void), (Value) {.p = 0});
 }
 
-void entities_append_declaration_list(DeclarationList *decl_list) {
-    for (size_t i = 0; i < decl_list->num_declarations; i++) {
-        entity_append_declaration(decl_list->declarations[i]);
+void entities_append_declaration_list() {
+    for (size_t i = 0; i < global_declaration_list->num_declarations; i++) {
+        Declaration *d = global_declaration_list->declarations[i];
+        if (d->kind != DECL_ATTRIBUTE) {
+            entity_append_declaration(d);
+        }
     }
 }

@@ -1,7 +1,8 @@
 const char* compile_str(const char *code) {
     init_stream(NULL, code);
     init_entities();
-    entities_append_declaration_list(parse_file());
+    global_declaration_list = parse_file();
+    entities_append_declaration_list();
     complete_entities();
     generate_c_code();
     const char *c_code = gen_buf;
@@ -16,7 +17,8 @@ bool compile_file(const char *path) {
     }
     init_stream(path, code);
     init_entities();
-    entities_append_declaration_list(parse_file());
+    global_declaration_list = parse_file();
+    entities_append_declaration_list();
     complete_entities();
     generate_c_code();
     const char *c_code = gen_buf;
