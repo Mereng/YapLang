@@ -3,9 +3,10 @@ const char *stream;
 const char *line_start;
 SrcLocation location_builtin = {.name = "<builtin>"};
 
-#define fatal_syntax(...) syntax_error(__VA_ARGS__); exit(-1);
-#define syntax_error(...) error(token.location, __VA_ARGS__);
+#define fatal_syntax(...) error_here(__VA_ARGS__); exit(-1);
+#define error_here(...) error(token.location, __VA_ARGS__);
 #define fatal_error(...) error(__VA_ARGS__); exit(-2);
+#define warning_here(...) warning(token.location, __VA_ARGS__);
 
 void error(SrcLocation location, const char* fmt, ...) {
     if (location.name == NULL) {
@@ -13,7 +14,7 @@ void error(SrcLocation location, const char* fmt, ...) {
     }
     va_list args;
     va_start(args, fmt);
-    printf("%s (%d) ", location.name, location.line);
+    printf("%s (%d): error: ", location.name, location.line);
     vprintf(fmt, args);
     va_end(args);
     printf("\n");
@@ -26,6 +27,18 @@ void fatal(const char *fmt, ...) {
     vprintf(fmt, args);
     va_end(args);
     exit(1);
+}
+
+void warning(SrcLocation loc, const char *fmt, ...) {
+    if (loc.name == NULL) {
+        loc = location_builtin;
+    }
+    va_list args;
+    va_start(args, fmt);
+    printf("%s (%d): warning: ", loc.name, loc.line);
+    vprintf(fmt, args);
+    va_end(args);
+    printf("\n");
 }
 
 typedef struct InternStr {

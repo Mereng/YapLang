@@ -952,7 +952,12 @@ ResolvedExpression resolve_const_expression(Expression *expr);
 ResolvedExpression resolve_expression_decayed(Expression *expr);
 ResolvedExpression resolve_expression_decayed_expected_type(Expression *expr, Type *expected_type);
 
-bool resolve_statement(Statement *stmt, Type *ret_type);
+typedef struct StatementContext {
+    bool break_legal;
+    bool continue_legal;
+} StatementContext;
+
+bool resolve_statement(Statement *stmt, Type *ret_type, StatementContext ctx);
 
 ResolvedExpression resolve_expression_name(Expression *expr) {
     Entity *entity = resolve_entity_name(expr->name);
@@ -1584,11 +1589,11 @@ void resolve_conditional_expression(Expression *expr) {
     }
 }
 
-bool resolve_statement_block(StatementBlock block, Type *ret_type) {
+bool resolve_statement_block(StatementBlock block, Type *ret_type, StatementContext ctx) {
     Entity *entities = local_scope_enter();
     bool returns = false;
     for (size_t i = 0; i < block.num_statements; i++) {
-        returns = resolve_statement(block.statements[i], ret_type);
+        returns = resolve_statement(block.statements[i], ret_type,  ctx);
     }
     local_scope_leave(entities);
     return returns;
@@ -1658,18 +1663,18 @@ void resolve_statement_assign(Statement *stmt) {
     }
 }
 
-bool resolve_statement(Statement *stmt, Type *ret_type) {
+bool resolve_statement(Statement *stmt, Type *ret_type, StatementContext ctx) {
     switch (stmt->kind) {
         case STMT_IF: {
             resolve_conditional_expression(stmt->if_stmt.cond);
-            bool returns = resolve_statement_block(stmt->if_stmt.then, ret_type);
+            bool returns = resolve_statement_block(stmt->if_stmt.then, ret_type, ctx);
             for (size_t i = 0; i < stmt->if_stmt.num_else_ifs; i++) {
                 ElseIf else_if = stmt->if_stmt.else_ifs[i];
                 resolve_conditional_expression(else_if.cond);
-                returns = resolve_statement_block(else_if.body, ret_type);
+                returns = resolve_statement_block(else_if.body, ret_type, ctx);
             }
             if (stmt->if_stmt.else_body.statements) {
-                returns = resolve_statement_block(stmt->if_stmt.else_body, ret_type);
+                returns = resolve_statement_block(stmt->if_stmt.else_body, ret_type, ctx);
             } else {
                 returns = false;
             }
@@ -1678,28 +1683,33 @@ bool resolve_statement(Statement *stmt, Type *ret_type) {
         case STMT_FOR: {
             Entity *entities = local_scope_enter();
             if (stmt->for_stmt.init) {
-                resolve_statement(stmt->for_stmt.init, ret_type);
+                resolve_statement(stmt->for_stmt.init, ret_type, ctx);
             }
             if (stmt->for_stmt.cond) {
                 resolve_conditional_expression(stmt->for_stmt.cond);
             }
             if (stmt->for_stmt.next) {
-                resolve_statement(stmt->for_stmt.next, ret_type);
+                resolve_statement(stmt->for_stmt.next, ret_type, ctx);
             }
-            resolve_statement_block(stmt->for_stmt.body, ret_type);
+            ctx.continue_legal = true;
+            ctx.break_legal = true;
+            resolve_statement_block(stmt->for_stmt.body, ret_type, ctx);
             local_scope_leave(entities);
             return false;
         }
         case STMT_WHILE:
         case STMT_DO_WHILE:
             resolve_conditional_expression(stmt->while_stmt.cond);
-            resolve_statement_block(stmt->while_stmt.body, ret_type);
+            ctx.break_legal = true;
+            ctx.continue_legal = true;
+            resolve_statement_block(stmt->while_stmt.body, ret_type, ctx);
             return false;
         case STMT_SWITCH: {
             ResolvedExpression expr = resolve_expression(stmt->switch_stmt.expr);
             if (!is_integer_type(expr.type)) {
                 fatal_error(stmt->location, "Switch expression not an integer");
             }
+            ctx.break_legal = true;
             bool returns = false;
             bool has_default = false;
             for (size_t i = 0; i < stmt->switch_stmt.num_cases; i++) {
@@ -1710,14 +1720,19 @@ bool resolve_statement(Statement *stmt, Type *ret_type) {
                         fatal_error(stmt->location, "Case expression in switch typespec mismatch");
                     }
                 }
-                returns = resolve_statement_block(_case.body, ret_type);
-
                 if (_case.is_default) {
                     if (has_default) {
                         fatal_error(stmt->location, "Switch statement has nultiple default")
                     }
                     has_default = true;
                 }
+                if (_case.body.num_statements > 0) {
+                    Statement *last_stmt = _case.body.statements[_case.body.num_statements - 1];
+                    if (last_stmt->kind == STMT_BREAK) {
+                        warning(last_stmt->location, "Case blocks already end with an impliicit break");
+                    }
+                }
+                returns = resolve_statement_block(_case.body, ret_type, ctx) && returns;
             }
 
             return returns && has_default;
@@ -1742,11 +1757,20 @@ bool resolve_statement(Statement *stmt, Type *ret_type) {
             }
             return true;
         case STMT_BREAK:
+            if (!ctx.break_legal) {
+                fatal_error(stmt->location, "Illegal break");
+            }
+            return false;
         case STMT_CONTINUE:
+            if (!ctx.continue_legal) {
+                fatal_error(stmt->location, "Illegal continue");
+            }
             return false;
         case STMT_EXPR:
             resolve_expression(stmt->expr);
             return false;
+        case STMT_BLOCK:
+            return resolve_statement_block(stmt->block, ret_type, ctx);
         default:
             assert(0);
             return false;
@@ -1904,7 +1928,7 @@ void resolve_func(Entity *entity) {
         local_entities_push_var(param.name, param_type);
     }
     Type *ret = resolve_typespec(entity->decl->func.return_type);
-    bool returns = resolve_statement_block(entity->decl->func.body, ret);
+    bool returns = resolve_statement_block(entity->decl->func.body, ret, (StatementContext) {0});
     local_scope_leave(entities);
     if (ret != type_void && !returns) {
         fatal_error(entity->decl->location, "Not all control path return value");

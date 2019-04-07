@@ -193,12 +193,12 @@ void parse_int() {
         }
 
         if (digit >= base) {
-            syntax_error("Digit '%c' out of range for base %d", *stream, base);
+            error_here("Digit '%c' out of range for base %d", *stream, base);
             digit = 0;
         }
 
         if (val > (ULLONG_MAX - digit) / base) {
-            syntax_error("Integer literal is overflow overflow");
+            error_here("Integer literal is overflow overflow");
             while (isdigit(*stream)) {
                 stream++;
             }
@@ -253,7 +253,7 @@ void parse_float() {
         }
 
         if (!isdigit(*stream)) {
-            syntax_error("Expected digit after float literal exponent, found '%c'", *stream);
+            error_here("Expected digit after float literal exponent, found '%c'", *stream);
         }
 
         while (isdigit(*stream)) {
@@ -264,7 +264,7 @@ void parse_float() {
     double val = strtod(start, NULL);
 
     if (val == HUGE_VALF) {
-        syntax_error("Float literal overflow");
+        error_here("Float literal overflow");
     }
 
     token.kind = TOKEN_FLOAT;
@@ -290,15 +290,15 @@ void parse_char() {
     stream++;
     char val = 0;
     if (*stream == '\'') {
-        syntax_error("Char literal can not be empty");
+        error_here("Char literal can not be empty");
         stream++;
     } else if (*stream == '\n') {
-        syntax_error("Char literal can not contain new line");
+        error_here("Char literal can not contain new line");
     } else if (*stream == '\\') {
         stream++;
         val = escape_to_char[*stream];
         if (val == 0 && *stream != '0') {
-            syntax_error("Invalid char literal escape '\\%c", *stream);
+            error_here("Invalid char literal escape '\\%c", *stream);
         }
         stream++;
     } else {
@@ -307,7 +307,7 @@ void parse_char() {
     }
 
     if (*stream != '\'') {
-        syntax_error("Expected closing char quote, got '%c'", *stream);
+        error_here("Expected closing char quote, got '%c'", *stream);
     }
     stream++;
 
@@ -336,19 +336,19 @@ void parse_str() {
             stream++;
         }
         if (!*stream) {
-            syntax_error("Unexpected end of file");
+            error_here("Unexpected end of file");
         }
         token.mod = TOKENMOD_MULTILINE;
     } else {
         while (*stream && *stream != '"') {
             char val = *stream;
             if (val == '\n') {
-                syntax_error("String literal can not contain new line");
+                error_here("String literal can not contain new line");
             } else if (val == '\\') {
                 stream++;
                 val = escape_to_char[*stream];
                 if (val == 0 && *stream != '0') {
-                    syntax_error("Invalid string literal escape '\\%c", *stream);
+                    error_here("Invalid string literal escape '\\%c", *stream);
                 }
             }
 
@@ -360,7 +360,7 @@ void parse_str() {
             assert(*stream == '"');
             stream++;
         } else {
-            syntax_error("Unexpected end of file within string literal");
+            error_here("Unexpected end of file within string literal");
         }
     }
 
@@ -499,6 +499,24 @@ void next_token() {
                     stream++;
                 }
                 goto top;
+            } else if (*stream == '*') {
+                stream++;
+                int level = 1;
+                while (*stream && level > 0) {
+                    if (stream[0] == '/' && stream[1] == '*') {
+                        level++;
+                        stream += 2;
+                    } else if (stream[0] == '*' && stream[1] == '/') {
+                        level--;
+                        stream += 2;
+                    } else {
+                        if (*stream == '\n') {
+                            token.location.line++;
+                        }
+                        stream++;
+                    }
+                }
+                goto top;
             }
             break;
         CASE1('\0', TOKEN_EOF)
@@ -524,9 +542,8 @@ void next_token() {
         CASE3('-', '-', '=', TOKEN_SUB, TOKEN_DEC, TOKEN_SUB_ASSIGN)
         CASE3('&', '&', '=', TOKEN_BIN_AND, TOKEN_AND, TOKEN_AND_ASSIGN)
         CASE3('|', '|', '=', TOKEN_BIN_OR, TOKEN_OR, TOKEN_OR_ASSIGN)
-
         default:
-            syntax_error("Invalid %c token", *stream);
+            error_here("Invalid %c token", *stream);
             stream++;
             goto top;
     }

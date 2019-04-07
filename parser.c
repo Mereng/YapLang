@@ -211,7 +211,7 @@ Typespec* parse_type_func_param() {
     Typespec *type = parse_type();
     if (match_token(TOKEN_COLON)) {
         if (type->kind != TYPESPEC_NAME) {
-            syntax_error("Colons in parameters of function type must be preceded by names");
+            error_here("Colons in parameters of function type must be preceded by names");
         }
         type = parse_type();
     }
@@ -228,12 +228,12 @@ Typespec* parse_type_func() {
         while (match_token(TOKEN_COMMA)) {
             if (match_token(TOKEN_ELLIPSIS)){
                 if (is_variadic) {
-                    syntax_error("Multiple ellipsis instances in function type");
+                    error_here("Multiple ellipsis instances in function type");
                 }
                 is_variadic = true;
             } else {
                 if (is_variadic) {
-                    syntax_error("Ellipsis must be last parameter");
+                    error_here("Ellipsis must be last parameter");
                 }
                 buf_push(args, parse_type_func_param());
             }
@@ -363,7 +363,7 @@ Statement* parse_statement_for(SrcLocation location) {
     if (!is_token(TOKEN_RPAREN)) {
         next = parse_statement_simple();
         if (next->kind == STMT_AUTO_ASSIGN) {
-            syntax_error("Auto assign statement not allowed in for statement's next clause");
+            error_here("Auto assign statement not allowed in for statement's next clause");
         }
     }
     expect_token(TOKEN_RPAREN);
@@ -398,7 +398,7 @@ SwitchCase parse_statement_switch_case() {
         } else {
             next_token();
             if (is_default) {
-                syntax_error("Duplicate default not allowed in switch clause");
+                error_here("Duplicate default not allowed in switch clause");
             }
             is_default = true;
         }
@@ -565,12 +565,12 @@ Declaration* parse_declaration_func(SrcLocation location) {
         while (match_token(TOKEN_COMMA)) {
             if (match_token(TOKEN_ELLIPSIS)) {
                 if (is_variadic) {
-                    syntax_error("Multiple ellipsis in function declaration");
+                    error_here("Multiple ellipsis in function declaration");
                 }
                 is_variadic = true;
             } else {
                 if (is_variadic) {
-                    syntax_error("Ellipsis must be last parameter");
+                    error_here("Ellipsis must be last parameter");
                 }
                 buf_push(params, parse_declaration_func_param());
             }
@@ -599,7 +599,7 @@ AttributeArgument parse_attribute_argument() {
      const char *name = NULL;
      if (match_token(TOKEN_ASSIGN)) {
          if (expr->kind != EXPR_NAME) {
-             syntax_error("Left operand of = in attribute argument must be name");
+             error_here("Left operand of = in attribute argument must be name");
          }
          name = expr->name;
          expr = parse_expression();
