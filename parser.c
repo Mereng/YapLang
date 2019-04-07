@@ -500,13 +500,19 @@ AggregateItem parse_declaration_aggregate_item() {
 
 Declaration* parse_declaration_aggregate(DeclarationKind kind, SrcLocation location) {
     const char *name = parse_name();
-    expect_token(TOKEN_LBRACE);
-    AggregateItem *items = NULL;
-    while (!is_token(TOKEN_EOF) && !is_token(TOKEN_RBRACE)) {
-        buf_push(items, parse_declaration_aggregate_item());
+    if (match_token(TOKEN_SEMICOLON)) {
+        Declaration *decl = declaration_aggregate(kind, name, NULL, 0, location);
+        decl->is_incomplete = true;
+        return decl;
+    } else {
+        expect_token(TOKEN_LBRACE);
+        AggregateItem *items = NULL;
+        while (!is_token(TOKEN_EOF) && !is_token(TOKEN_RBRACE)) {
+            buf_push(items, parse_declaration_aggregate_item());
+        }
+        expect_token(TOKEN_RBRACE);
+        return declaration_aggregate(kind, name, ast_dup(items, buf_sizeof(items)), buf_len(items), location);
     }
-    expect_token(TOKEN_RBRACE);
-    return declaration_aggregate(kind, name, ast_dup(items, buf_sizeof(items)), buf_len(items), location);
 }
 
 Declaration* parse_declaration_var(SrcLocation location) {
@@ -582,15 +588,19 @@ Declaration* parse_declaration_func(SrcLocation location) {
         ret = parse_type();
     }
     StatementBlock block = {0};
-    bool is_incomplete = false;
-    if (is_token(TOKEN_LBRACE)) {
-        block = parse_statement_block();
-    } else {
-        expect_token(TOKEN_SEMICOLON);
+    bool is_incomplete;
+    if (match_token(TOKEN_SEMICOLON)) {
         is_incomplete = true;
     }
-    return declaration_func(name, ast_dup(params, buf_sizeof(params)), buf_len(params), ret, is_variadic, is_incomplete,
+    else {
+        block = parse_statement_block();
+        is_incomplete = false;
+    }
+
+    Declaration *decl = declaration_func(name, ast_dup(params, buf_sizeof(params)), buf_len(params), ret, is_variadic,
             block, location);
+    decl->is_incomplete = is_incomplete;
+    return decl;
 }
 
 AttributeArgument parse_attribute_argument() {

@@ -225,6 +225,7 @@ struct Declaration {
     DeclarationKind kind;
     const char *name;
     AttributeList attributes;
+    bool is_incomplete;
     union {
         Attribute attribute;
         struct {
@@ -248,7 +249,6 @@ struct Declaration {
             size_t num_params;
             Typespec *return_type;
             bool is_variadic;
-            bool is_incomplete;
             StatementBlock body;
         } func;
         struct {
@@ -267,7 +267,7 @@ Declaration* declaration_aggregate(DeclarationKind kind, const char *name, Aggre
 Declaration* declaration_var(const char *name, Typespec *type, Expression *expr, SrcLocation loc);
 Declaration* declaration_const(const char *name, Expression *expr, Typespec *type, SrcLocation loc);
 Declaration* declaration_func(const char *name, FuncParam *params, size_t num_params, Typespec *ret_type,
-                              bool is_variadic, bool is_incomplete, StatementBlock body, SrcLocation loc);
+                              bool is_variadic, StatementBlock body, SrcLocation loc);
 Declaration* declaration_typedef(const char *name, Typespec *type, SrcLocation loc);
 Declaration* declaration_attribute(Attribute attribute, SrcLocation loc);
 Attribute* get_declaration_attribute(Declaration *declaration, const char *name);

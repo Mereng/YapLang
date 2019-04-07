@@ -114,13 +114,12 @@ Declaration* declaration_const(const char *name, Expression *expr, Typespec *typ
     return decl;
 }
 Declaration* declaration_func(const char *name, FuncParam *params, size_t num_params, Typespec *ret_type,
-        bool is_variadic, bool is_incomplete, StatementBlock body, SrcLocation loc) {
+        bool is_variadic, StatementBlock body, SrcLocation loc) {
     Declaration *decl = declaration_new(DECL_FUNC, name, loc);
     decl->func.params = params;
     decl->func.num_params = num_params;
     decl->func.return_type = ret_type;
     decl->func.is_variadic = is_variadic;
-    decl->func.is_incomplete = is_incomplete;
     decl->func.body = body;
     return decl;
 }

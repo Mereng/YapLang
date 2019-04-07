@@ -543,8 +543,11 @@ void complete_type(Type *type) {
         return;
     }
 
-    type->kind = TYPE_COMPLETING;
     Declaration *decl = type->entity->decl;
+    if (decl->is_incomplete) {
+        fatal_error(decl->location, "Can't use incomplete type");
+    }
+    type->kind = TYPE_COMPLETING;
     TypeField *fields = NULL;
 
     for (AggregateItem *it = decl->aggregate.items; it != decl->aggregate.items + decl->aggregate.num_items; it++) {
@@ -1915,7 +1918,7 @@ Type* resolve_declaration_func(Declaration *decl) {
 }
 
 void resolve_func(Entity *entity) {
-    if (entity->decl->func.is_incomplete) {
+    if (entity->decl->is_incomplete) {
         return;
     }
     Entity *entities = local_scope_enter();
@@ -1980,6 +1983,9 @@ Entity* resolve_entity_name(const char *name) {
 void complete_entity(Entity *entity) {
     resolve_entity(entity);
     if (entity->kind == ENTITY_TYPE) {
+        if (entity->decl && entity->decl->is_incomplete) {
+            return;
+        }
         complete_type(entity->type);
     } else if (entity->kind == ENTITY_FUNC) {
         resolve_func(entity);
@@ -2010,6 +2016,7 @@ void init_entities() {
     entity_append_type("llong", type_llong);
     entity_append_type("ullong", type_ullong);
     entity_append_type("float", type_float);
+    entity_append_type("double", type_double);
 
     entity_append_typedef("int8", type_schar);
     entity_append_typedef("uint8", type_uchar);

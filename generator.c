@@ -196,6 +196,8 @@ void generate_sync_location(SrcLocation location) {
     }
 }
 
+void generate_init_expression(Expression *expr);
+
 void generate_expression_compound(Expression *expr, bool is_auto_assign) {
     if (is_auto_assign) {
         genf("{");
@@ -217,7 +219,7 @@ void generate_expression_compound(Expression *expr, bool is_auto_assign) {
             generate_expression(field.index);
             genf("] = ");
         }
-        generate_expression(field.init);
+        generate_init_expression(field.init);
     }
 
     if (expr->compound.num_fields == 0) {
@@ -483,30 +485,32 @@ void generate_statement(Statement *stmt) {
 }
 
 void generate_func_declaration(Declaration *decl) {
-    generate_sync_location(decl->location);
-    if (decl->func.return_type) {
-        genlnf("%s(", typespec_to_cdecl(decl->func.return_type, decl->name));
-    } else {
-        genlnf("void %s(", decl->name);
-    }
+    char *result = NULL;
+    buf_printf(result, "%s(", decl->name);
 
     if (decl->func.num_params == 0) {
-        genf("void");
+        buf_printf(result, "void");
     } else {
         for (size_t i = 0; i < decl->func.num_params; i++) {
             FuncParam param = decl->func.params[i];
             if (i != 0) {
-                genf(", ");
+                buf_printf(result, ", ");
             }
-            genf("%s", typespec_to_cdecl(param.type, param.name));
+            buf_printf(result, "%s", typespec_to_cdecl(param.type, param.name));
         }
     }
 
     if (decl->func.is_variadic) {
-        genf(", ...");
+        buf_printf(result, ", ...");
     }
 
-    genf(")");
+    buf_printf(result, ")");
+    generate_sync_location(decl->location);
+    if (decl->func.return_type) {
+        genlnf("%s", typespec_to_cdecl(decl->func.return_type, result));
+    } else {
+        genlnf("void %s", result);
+    }
 }
 
 void generate_forward_declarations() {
@@ -579,14 +583,11 @@ void generate_declaration(Entity *entity) {
             genf(")");
             break;
         case DECL_VAR:
+            genlnf("extern ");
             if (decl->var.type && !is_array_typespec_incomplete(decl->var.type)) {
                 genlnf("%s", typespec_to_cdecl(decl->var.type, entity->name));
             } else {
                 genlnf("%s", type_to_cdecl(entity->type, entity->name));
-            }
-            if (decl->var.expr) {
-                genf(" = ");
-                generate_init_expression(decl->var.expr);
             }
             genf(";");
             break;
@@ -616,18 +617,29 @@ void generate_ordered_entities() {
     }
 }
 
-void generate_func_definitions() {
+void generate_definitions() {
     for (Entity **it = global_entities_buf; it != buf_end(global_entities_buf); it++) {
         Entity *entity = *it;
         Declaration *decl = entity->decl;
-        if (decl && decl->kind == DECL_FUNC && !get_declaration_attribute(decl, keywords.foreign)) {
-            if (decl->func.is_incomplete) {
-                fatal_error(decl->location, "Incomplete function not allowed");
-            }
+        if (!decl || get_declaration_attribute(decl, keywords.foreign) || decl->is_incomplete) {
+            continue;
+        }
+        if (decl->kind == DECL_FUNC) {
             generate_func_declaration(decl);
             genf(" ");
             generate_statement_block(decl->func.body);
             genln();
+        } else if (decl->kind == DECL_VAR) {
+            if (decl->var.type && !is_array_typespec_incomplete(decl->var.type)){
+                genlnf("%s", typespec_to_cdecl(decl->var.type, entity->name));
+            } else {
+                genlnf("%s", type_to_cdecl(entity->type, entity->name));
+            }
+            if (decl->var.expr) {
+                genf(" = ");
+                generate_init_expression(decl->var.expr);
+            }
+            genf(";");
         }
     }
 }
@@ -658,7 +670,12 @@ void generate_headers() {
                 }
                 if (!found) {
                     buf_push(gen_header_buf, header);
-                    genlnf("#include %s", header);
+                    genlnf("#include ");
+                    if (*header == '<') {
+                        genf("%s", header);
+                    } else {
+                        generate_string(header, false);
+                    }
                 }
             }
         }
@@ -673,5 +690,5 @@ void generate_c_code() {
     generate_forward_declarations();
     genln();
     generate_ordered_entities();
-    generate_func_definitions();
+    generate_definitions();
 }
