@@ -164,7 +164,6 @@ enum TypespecKind {
 struct Typespec {
     SrcLocation location;
     TypespecKind kind;
-    Type *type;
     Typespec *base;
     union {
         const char *name;
@@ -224,7 +223,6 @@ struct FuncParam {
 
 struct Declaration {
     DeclarationKind kind;
-    Entity *entity;
     const char *name;
     AttributeList attributes;
     union {
@@ -317,7 +315,6 @@ typedef struct CompoundField {
 
 struct Expression {
     ExpressionKind kind;
-    Type *type;
     union {
         struct {
             TokenSuffix suffix;

@@ -1,4 +1,6 @@
 
+#include <ast.h>
+
 DeclarationList *global_declaration_list;
 
 Type *type_void = &(Type){TYPE_VOID, 0};
@@ -268,19 +270,24 @@ Type *type_pointer(Type *base) {
 }
 
 typedef struct ArrayTypeCached {
-    Type *base;
-    size_t size;
-    Type *array;
+    Type *type;
+    struct ArrayTypeCached *next;
 } ArrayTypeCached;
 
-ArrayTypeCached *array_type_cache;
+Map array_type_cache;
 
 Type* type_array(Type *base, size_t size) {
-    for (ArrayTypeCached *it = array_type_cache; it != buf_end(array_type_cache); it++) {
-        if (it->base == base && it->size == size) {
-            return it->array;
+    uint64_t hash = hash_mix(hash_pointer(base), hash_uint64(size));
+    void *key = (void*)(hash ? hash : 1);
+    ArrayTypeCached *cached = map_get(&array_type_cache, key);
+    for (ArrayTypeCached *it = cached; it; it = it->next) {
+        Type *type = it->type;
+        if (type->base == base && type->num_elements == size) {
+            return type;
         }
     }
+
+    complete_type(base);
 
     Type *type = type_new(TYPE_ARRAY);
     type->size = size * base->size;
@@ -288,7 +295,10 @@ Type* type_array(Type *base, size_t size) {
     type->base = base;
     type->num_elements = size;
     type->is_nonmodify = base->is_nonmodify;
-    buf_push(array_type_cache, ((ArrayTypeCached){base, size, type}));
+    ArrayTypeCached *new = malloc(sizeof(ArrayTypeCached));
+    new->type = type;
+    new->next = cached;
+    map_put(&array_type_cache, key, new);
     return type;
 }
 
@@ -312,28 +322,22 @@ Type* type_const(Type *base) {
 }
 
 typedef struct FuncTypeCached {
-    Type **params;
-    size_t num_params;
-    Type *ret;
-    Type *func;
-    bool variadic;
+    Type *type;
+    struct FuncTypeCached *next;
 } FuncTypeCached;
 
-FuncTypeCached *func_type_cache;
+Map func_type_cache;
 
-Type* type_func(Type **params, size_t num_params, Type *ret, bool variadic) {
-    for (FuncTypeCached *it = func_type_cache; it != buf_end(func_type_cache); it++) {
-        if (it->num_params == num_params && it->ret == ret && it->variadic == variadic) {
-            bool isMatch = true;
-            for (size_t i = 0; i < num_params; i++) {
-                if (it->params[i] != params[i]) {
-                    isMatch = false;
-                    break;
-                }
-            }
-
-            if (isMatch) {
-                return it->func;
+Type* type_func(Type **args, size_t num_args, Type *ret, bool variadic) {
+    size_t args_size = num_args * sizeof(*args);
+    uint64_t hash = hash_mix(hash_bytes(args, args_size), hash_pointer(ret));
+    void *key = (void*)(hash ? hash : 1);
+    FuncTypeCached *cached = map_get(&func_type_cache, key);
+    for (FuncTypeCached *it = cached; it; it = it->next) {
+        Type *type = it->type;
+        if (type->func.num_args == num_args && type->func.ret == ret && type->func.is_variadic == variadic) {
+            if (memcmp(type->func.args, args, args_size) == 0) {
+                return type;
             }
         }
     }
@@ -341,12 +345,15 @@ Type* type_func(Type **params, size_t num_params, Type *ret, bool variadic) {
     Type *type = type_new(TYPE_FUNC);
     type->size = POINTER_SIZE;
     type->align = POINTER_ALIGN;
-    type->func.args = calloc(num_params, sizeof(Type *));
-    memcpy(type->func.args, params, num_params * sizeof(Type*));
-    type->func.num_args = num_params;
+    type->func.args = calloc(num_args, sizeof(Type *));
+    memcpy(type->func.args, args, num_args * sizeof(Type*));
+    type->func.num_args = num_args;
     type->func.ret = ret;
     type->func.is_variadic = variadic;
-    buf_push(func_type_cache, ((FuncTypeCached){params, num_params, ret, type}));
+    FuncTypeCached *new = malloc(sizeof(FuncTypeCached));
+    new->type = type;
+    new->next = cached;
+    map_put(&func_type_cache, key, new);
     return type;
 }
 
@@ -362,6 +369,15 @@ Type* type_enum(Entity *entity) {
     type->size = type_int->size;
     type->align = type_int->align;
     return type;
+}
+
+Map resolved_type_map;
+
+Type* get_resolved_type(void *key) {
+    return map_get(&resolved_type_map, key);
+}
+void set_resolved_type(void *key, Type *type) {
+    map_put(&resolved_type_map, key, type);
 }
 
 Type* base_type(Type *type) {
@@ -645,7 +661,6 @@ void entity_append_const(const char *name, Type *type, Value val) {
 Entity* entity_append_declaration(Declaration *declaration) {
     Entity *entity = entity_declaration(declaration);
     global_entities_put(entity);
-    declaration->entity = entity;
     if (declaration->kind == DECL_ENUM) {
         entity->state = ENTITY_RESOLVED;
         entity->type = type_enum(entity);
@@ -1538,10 +1553,7 @@ ResolvedExpression resolve_expression_expected_type(Expression *expr, Type *expe
             assert(0);
             break;
     }
-
-    if (resolved.type) {
-        expr->type = resolved.type;
-    }
+    set_resolved_type(expr, resolved.type);
     return resolved;
 }
 
@@ -1567,7 +1579,7 @@ ResolvedExpression resolve_expression_decayed_expected_type(Expression *expr, Ty
 
 void resolve_conditional_expression(Expression *expr) {
     ResolvedExpression cond = resolve_expression(expr);
-    if (!is_math_type(cond.type) && cond.type->kind != TYPE_POINTER) {
+    if (!is_scalar_type(cond.type)) {
         fatal_error(expr->location, "Conditional expression must have mathematics or pointer type");
     }
 }
@@ -1665,9 +1677,15 @@ bool resolve_statement(Statement *stmt, Type *ret_type) {
         }
         case STMT_FOR: {
             Entity *entities = local_scope_enter();
-            resolve_statement(stmt->for_stmt.init, ret_type);
-            resolve_conditional_expression(stmt->for_stmt.cond);
-            resolve_statement(stmt->for_stmt.next, ret_type);
+            if (stmt->for_stmt.init) {
+                resolve_statement(stmt->for_stmt.init, ret_type);
+            }
+            if (stmt->for_stmt.cond) {
+                resolve_conditional_expression(stmt->for_stmt.cond);
+            }
+            if (stmt->for_stmt.next) {
+                resolve_statement(stmt->for_stmt.next, ret_type);
+            }
             resolve_statement_block(stmt->for_stmt.body, ret_type);
             local_scope_leave(entities);
             return false;
@@ -1679,6 +1697,9 @@ bool resolve_statement(Statement *stmt, Type *ret_type) {
             return false;
         case STMT_SWITCH: {
             ResolvedExpression expr = resolve_expression(stmt->switch_stmt.expr);
+            if (!is_integer_type(expr.type)) {
+                fatal_error(stmt->location, "Switch expression not an integer");
+            }
             bool returns = false;
             bool has_default = false;
             for (size_t i = 0; i < stmt->switch_stmt.num_cases; i++) {
@@ -1795,7 +1816,7 @@ Type* resolve_typespec(Typespec *typespec) {
             break;
     }
 
-    typespec->type = type;
+    set_resolved_type(typespec, type);
     return type;
 }
 
