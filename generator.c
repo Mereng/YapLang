@@ -7,6 +7,9 @@ SrcLocation gen_location;
 const char **gen_header_buf;
 
 const char *gen_init = "#include <stdbool.h>\n"
+                       "#include <stdint.h>\n"
+                       "#include <stddef.h>\n"
+                       "\n"
                        "typedef signed char schar;\n"
                        "typedef unsigned char uchar;\n"
                        "typedef unsigned short ushort;\n"
@@ -14,14 +17,20 @@ const char *gen_init = "#include <stdbool.h>\n"
                        "typedef unsigned long ulong;\n"
                        "typedef long long llong;\n"
                        "typedef unsigned long long ullong;\n"
-                       "typedef char int8;\n"
-                       "typedef uchar uint8;\n"
-                       "typedef short int16;\n"
-                       "typedef ushort uint16;\n"
-                       "typedef int int32;\n"
-                       "typedef uint uint32;\n"
-                       "typedef llong int64;\n"
-                       "typedef ullong uint64;\n";
+                       "\n"
+                       "typedef int8_t int8;\n"
+                       "typedef uint8_t uint8;\n"
+                       "typedef int16_t int16;\n"
+                       "typedef uint16_t uint16;\n"
+                       "typedef int32_t int32;\n"
+                       "typedef uint32_t uint32;\n"
+                       "typedef int64_t int64;\n"
+                       "typedef uint64_t uint64;\n"
+                       "\n"
+                       "typedef uintptr_t uintptr;\n"
+                       "typedef size_t usize;\n"
+                       "typedef ptrdiff_t ssize;\n"
+                       "\n";
 
 #define genf(...) buf_printf(gen_buf, __VA_ARGS__)
 void genln() {
@@ -81,6 +90,9 @@ char* type_to_cdecl(Type *type, const char *str) {
 }
 
 char* typespec_to_cdecl(Typespec *typespec, const char *str) {
+    if (!typespec) {
+        return stringf("void%s%s", *str ? " " : "", str);
+    }
     switch (typespec->kind) {
         case TYPESPEC_NAME:
             return stringf("%s%s%s", typespec->name, *str ? " ": "", str);
