@@ -1210,7 +1210,8 @@ ResolvedExpression resolve_expression_compound(Expression *expr, Type *expected_
         type = expected_type;
     }
     complete_type(type);
-
+    bool is_const = type->kind == TYPE_CONST;
+    type = base_type(type);
     if (type->kind == TYPE_STRUCT || type->kind == TYPE_UNION) {
         int index = 0;
         for (size_t i = 0; i < expr->compound.num_fields; i++) {
@@ -1279,7 +1280,7 @@ ResolvedExpression resolve_expression_compound(Expression *expr, Type *expected_
             }
         }
     }
-    return resolved_lvalue(type);
+    return resolved_lvalue(is_const ? type_const(type) : type);
 }
 
 ResolvedExpression resolve_expression_call(Expression *expr) {
