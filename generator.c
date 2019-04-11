@@ -31,6 +31,11 @@ const char *gen_init = "#include <stdbool.h>\n"
                        "typedef uintptr_t uintptr;\n"
                        "typedef size_t usize;\n"
                        "typedef ptrdiff_t ssize;\n"
+                       "#ifdef _MSC_VER\n"
+                       "#define alignof(x) __alignof(x)\n"
+                       "#else\n"
+                       "#define alignof(x) __alignof__(x)\n"
+                       "#endif\n"
                        "\n";
 
 #define genf(...) buf_printf(gen_buf, __VA_ARGS__)
@@ -332,6 +337,15 @@ void generate_expression(Expression *expr) {
         case EXPR_SIZEOF_TYPE:
             genf("sizeof(%s)", type_to_cdecl(get_resolved_type(expr->size_of_type), ""));
             break;
+        case EXPR_ALIGNOF_EXPR:
+            genf("alignof(%s)", type_to_cdecl(get_resolved_type(expr->align_of_expr), ""));
+            break;
+        case EXPR_ALIGNOF_TYPE:
+            genf("alignof(%s)", type_to_cdecl(get_resolved_type(expr->align_of_type), ""));
+            break;
+        case EXPR_OFFSETOF:
+            genf("offsetof(%s, %s)", typespec_to_cdecl(expr->offset_of_field.type, ""), expr->offset_of_field.name);
+            break;
         default:
             assert(0);
             break;
@@ -375,12 +389,14 @@ void generate_simple_statement(Statement *stmt) {
                     generate_init_expression(stmt->auto_assign.init);
                 }
             } else {
-                genf("%s = ", type_to_cdecl(base_type(get_resolved_type(stmt->auto_assign.init)), stmt->auto_assign.name));
+                genf("%s = ", type_to_cdecl(unqualify_type(get_resolved_type(stmt->auto_assign.init)), stmt->auto_assign.name));
                 generate_init_expression(stmt->auto_assign.init);
             }
             break;
         case STMT_ASSIGN:
+            genf("(");
             generate_expression(stmt->assign.left);
+            genf(")");
             if (stmt->assign.right) {
                 genf(" %s ", token_kind_names[stmt->assign.op]);
                 generate_expression(stmt->assign.right);

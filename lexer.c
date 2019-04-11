@@ -6,6 +6,8 @@ struct {
     const char *union_keyword;
     const char *typedef_keyword;
     const char *sizeof_keyword;
+    const char *alignof_keyword;
+    const char *offsetof_keyword;
     const char *if_keyword;
     const char *else_keyword;
     const char *while_keyword;
@@ -36,6 +38,8 @@ void keywords_init() {
     INIT_KEYWORD(union);
     INIT_KEYWORD(typedef);
     INIT_KEYWORD(sizeof);
+    INIT_KEYWORD(alignof);
+    INIT_KEYWORD(offsetof);
     INIT_KEYWORD(if);
     INIT_KEYWORD(else);
     INIT_KEYWORD(while);

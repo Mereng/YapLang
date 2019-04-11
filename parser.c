@@ -43,29 +43,30 @@ Expression* parse_expression_compound(Typespec *type) {
 }
 
 Expression* parse_expression_operand() {
+    SrcLocation loc = token.location;
     if (is_token(TOKEN_INT)) {
         unsigned long long val = token.int_val;
         TokenSuffix suffix = token.suffix;
         TokenMod mod = token.mod;
         next_token();
-        return expression_int(val, suffix, mod, token.location);
+        return expression_int(val, suffix, mod, loc);
     } else if (is_token(TOKEN_FLOAT)) {
         double val = token.float_val;
         TokenSuffix suffix = token.suffix;
         next_token();
-        return expression_float(val, suffix, token.location);
+        return expression_float(val, suffix, loc);
     } else if (is_token(TOKEN_STR)) {
         const char *val = token.str_val;
         TokenMod mod = token.mod;
         next_token();
-        return expression_str(val, mod, token.location);
+        return expression_str(val, mod, loc);
     } else if (is_token(TOKEN_NAME)) {
         const char *name = token.name;
         next_token();
         if (is_token(TOKEN_LBRACE)) {
-            return parse_expression_compound(typespec_name(name, token.location));
+            return parse_expression_compound(typespec_name(name, loc));
         } else {
-            return expression_name(name, token.location);
+            return expression_name(name, loc);
         }
     } else if (is_token(TOKEN_LBRACE)) {
         return parse_expression_compound(NULL);
@@ -76,7 +77,7 @@ Expression* parse_expression_operand() {
             if (is_token(TOKEN_LBRACE)) {
                 return parse_expression_compound(type);
             } else {
-                return expression_cast(type, parse_expression(), token.location);
+                return expression_cast(type, parse_expression(), loc);
             }
         } else {
             Expression *expr = parse_expression();
@@ -88,12 +89,30 @@ Expression* parse_expression_operand() {
         if (match_token(TOKEN_COLON)) {
             Typespec *type = parse_type();
             expect_token(TOKEN_RPAREN);
-            return expression_sizeof_type(type, token.location);
+            return expression_sizeof_type(type, loc);
         } else {
             Expression *expr = parse_expression();
             expect_token(TOKEN_RPAREN);
-            return expression_sizeof_expr(expr, token.location);
+            return expression_sizeof_expr(expr, loc);
         }
+    } else if (match_keyword(keywords.alignof_keyword)) {
+        expect_token(TOKEN_LPAREN);
+        if (match_token(TOKEN_COLON)) {
+            Typespec *type = parse_type();
+            expect_token(TOKEN_RPAREN);
+            return  expression_alignof_type(type, loc);
+        } else {
+            Expression *expr = parse_expression();
+            expect_token(TOKEN_RPAREN);
+            return expression_alignof_expr(expr, loc);
+        }
+    } else if (match_keyword(keywords.offsetof_keyword)) {
+        expect_token(TOKEN_LPAREN);
+        Typespec *type = parse_type();
+        expect_token(TOKEN_COMMA);
+        const char *name = parse_name();
+        expect_token(TOKEN_RPAREN);
+        return expression_offsetof(type, name, loc);
     } else {
         fatal_syntax("Unexpected token %s in expression", token_str(token));
     }

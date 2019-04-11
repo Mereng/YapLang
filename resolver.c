@@ -22,7 +22,7 @@ Type *type_double = &(Type){TYPE_DOUBLE, 8, 8};
 
 Type *type_pointer(Type *base);
 void complete_type(Type *type);
-Type* base_type(Type *type);
+Type* unqualify_type(Type *type);
 
 typedef struct ResolvedExpression {
     Type *type;
@@ -33,7 +33,7 @@ typedef struct ResolvedExpression {
 
 ResolvedExpression resolved_rvalue(Type *type) {
     return (ResolvedExpression) {
-        .type = base_type(type),
+        .type = unqualify_type(type),
     };
 }
 
@@ -46,14 +46,14 @@ ResolvedExpression resolved_lvalue(Type *type) {
 
 ResolvedExpression resolved_const(Type *type, Value val) {
     return (ResolvedExpression) {
-        .type = base_type(type),
+        .type = unqualify_type(type),
         .is_const = true,
         .val = val
     };
 }
 
 ResolvedExpression resolved_decay(ResolvedExpression operand) {
-    operand.type = base_type(operand.type);
+    operand.type = unqualify_type(operand.type);
     if (operand.type->kind == TYPE_ARRAY) {
         operand.type = type_pointer(operand.type->base);
     }
@@ -80,8 +80,8 @@ bool is_scalar_type(Type *type) {
 bool is_null_pointer(ResolvedExpression operand);
 
 bool is_convertible(ResolvedExpression *operand, Type *dest) {
-    dest = base_type(dest);
-    Type *src = base_type(operand->type);
+    dest = unqualify_type(dest);
+    Type *src = unqualify_type(operand->type);
     if (dest == src) {
         return true;
     } else if (is_math_type(dest) && is_math_type(src)) {
@@ -90,7 +90,7 @@ bool is_convertible(ResolvedExpression *operand, Type *dest) {
         if (dest->base->kind == TYPE_CONST && src->base->kind == TYPE_CONST) {
             return dest->base->base == src->base->base || dest->base->base == type_void || src->base->base == type_void;
         } else {
-            Type *unqual_dest_base = base_type(dest->base);
+            Type *unqual_dest_base = unqualify_type(dest->base);
             if (unqual_dest_base == src->base) {
                 return true;
             } else if (unqual_dest_base == type_void) {
@@ -174,8 +174,8 @@ bool is_castable(ResolvedExpression *operand, Type *dest) {
 
 bool cast_expression(ResolvedExpression *operand, Type *type) {
     Type *limited_type = type;
-    type = base_type(type);
-    operand->type = base_type(operand->type);
+    type = unqualify_type(type);
+    operand->type = unqualify_type(operand->type);
     if (operand->type != type) {
         if (!is_castable(operand, operand->type)) {
             return false;
@@ -378,7 +378,7 @@ void set_resolved_type(void *key, Type *type) {
     map_put(&resolved_type_map, key, type);
 }
 
-Type* base_type(Type *type) {
+Type* unqualify_type(Type *type) {
     if (type->kind == TYPE_CONST) {
         return type->base;
     } else {
@@ -1168,10 +1168,13 @@ ResolvedExpression resolve_expression_binary(Expression *expr) {
 ResolvedExpression resolve_expression_field(Expression *expr) {
     ResolvedExpression operand = resolve_expression(expr->field.operand);
     bool is_const = operand.type->kind == TYPE_CONST;
-    Type *type = base_type(operand.type);
+    Type *type = unqualify_type(operand.type);
     complete_type(type);
     if (operand.type->kind == TYPE_POINTER) {
-        type = type->base;
+        operand = resolved_lvalue(type->base);
+        is_const = operand.type->kind == TYPE_CONST;
+        type = unqualify_type(operand.type);
+        complete_type(type);
     }
     if (type->kind != TYPE_STRUCT && type->kind != TYPE_UNION) {
         fatal_error(expr->location, "Can only access fields on aggregate types");
@@ -1201,7 +1204,7 @@ int aggregate_field_index(Type *type, const char *name) {
 
 ResolvedExpression resolve_expression_compound(Expression *expr, Type *expected_type) {
     if (!expected_type && !expr->compound.type) {
-        fatal_error(expr->location, "Impossible to determine typespec of compound literal");
+        fatal_error(expr->location, "Impossible to determine type of compound literal");
     }
 
     Type *type = NULL;
@@ -1212,7 +1215,7 @@ ResolvedExpression resolve_expression_compound(Expression *expr, Type *expected_
     }
     complete_type(type);
     bool is_const = type->kind == TYPE_CONST;
-    type = base_type(type);
+    type = unqualify_type(type);
     if (type->kind == TYPE_STRUCT || type->kind == TYPE_UNION) {
         int index = 0;
         for (size_t i = 0; i < expr->compound.num_fields; i++) {
@@ -1288,10 +1291,7 @@ ResolvedExpression resolve_expression_call(Expression *expr) {
 
     if (expr->call.operand->kind == EXPR_NAME) {
         Entity *entity = resolve_entity_name(expr->call.operand->name);
-        if (!entity) {
-            fatal_error(expr->location, "Name does not exists");
-        }
-        if (entity->kind == ENTITY_TYPE) {
+        if (entity && entity->kind == ENTITY_TYPE) {
             if (expr->call.num_args != 1) {
                 fatal_error(expr->location, "Type conversion is invalid, operator takes 1 argument");
             }
@@ -1526,19 +1526,52 @@ ResolvedExpression resolve_expression_expected_type(Expression *expr, Type *expe
                 if (entity && entity->kind == ENTITY_TYPE) {
                     complete_type(entity->type);
                     resolved = resolved_const(type_usize, (Value) {.ull = entity->type->size});
+                    set_resolved_type(expr->size_of_expr, entity->type);
                 }
-            } else {
-                ResolvedExpression result = resolve_expression(expr->size_of_expr);
-                Type *type = result.type;
-                complete_type(type);
-                resolved = resolved_const(type_usize, (Value) {.ull = type->size});
             }
+            ResolvedExpression result = resolve_expression(expr->size_of_expr);
+            Type *type = result.type;
+            complete_type(type);
+            resolved = resolved_const(type_usize, (Value) {.ull = type->size});
             break;
         }
         case EXPR_SIZEOF_TYPE: {
             Type *type = resolve_typespec(expr->size_of_type);
             complete_type(type);
             resolved = resolved_const(type_usize, (Value){.ull = type->size});
+            break;
+        }
+        case EXPR_ALIGNOF_EXPR: {
+            if (expr->align_of_expr->kind == EXPR_NAME) {
+                Entity *entity = resolve_entity_name(expr->align_of_expr->name);
+                if (entity && entity->kind == ENTITY_TYPE) {
+                    complete_type(entity->type);
+                    resolved = resolved_const(type_usize, (Value) {.ull = entity->type->align});
+                    set_resolved_type(expr->align_of_expr, entity->type);
+                    break;
+                }
+            }
+            Type *type = resolve_expression(expr->align_of_expr).type;
+            complete_type(type);
+            resolved = resolved_const(type_usize, (Value) {.ull = type->align});
+            break;
+        }
+        case EXPR_ALIGNOF_TYPE: {
+            Type *type = resolve_typespec(expr->align_of_type);
+            complete_type(type);
+            resolved = resolved_const(type_usize, (Value) {.ull = type->align});
+            break;
+        }
+        case EXPR_OFFSETOF: {
+            Type *type = resolve_typespec(expr->offset_of_field.type);
+            if (type->kind != TYPE_STRUCT && type->kind != TYPE_UNION) {
+                fatal_error(expr->location, "offsetof can only be used with struct or union");
+            }
+            int findex = aggregate_field_index(type, expr->offset_of_field.name);
+            if (findex < 0) {
+                fatal_error(expr->location, "No fiield %s in  type", expr->offset_of_field.name);
+            }
+            resolved = resolved_const(type_usize, (Value) {.ull = type->aggregate.fields[findex].offset});
             break;
         }
         case EXPR_FIELD:
@@ -1588,7 +1621,7 @@ ResolvedExpression resolve_expression_decayed_expected_type(Expression *expr, Ty
 }
 
 void resolve_conditional_expression(Expression *expr) {
-    ResolvedExpression cond = resolve_expression(expr);
+    ResolvedExpression cond = resolve_expression_decayed(expr);
     if (!is_scalar_type(cond.type)) {
         fatal_error(expr->location, "Conditional expression must have mathematics or pointer type");
     }
@@ -1609,7 +1642,7 @@ void resolve_statement_auto_assign(Statement *stmt) {
     if (stmt->auto_assign.type) {
         type = resolve_typespec(stmt->auto_assign.type);
         if (stmt->auto_assign.init) {
-            Type *expected = base_type(type);
+            Type *expected = unqualify_type(type);
             ResolvedExpression expr = resolve_expression_expected_type(stmt->auto_assign.init, expected);
             if (type->kind == TYPE_ARRAY && expr.type->kind == TYPE_ARRAY && type->base == expr.type->base &&
                 !type->num_elements) {
@@ -1619,7 +1652,7 @@ void resolve_statement_auto_assign(Statement *stmt) {
             }
         }
     } else {
-        type = base_type(resolve_expression(stmt->auto_assign.init).type);
+        type = unqualify_type(resolve_expression(stmt->auto_assign.init).type);
     }
     if (type->size == 0) {
         fatal_error(stmt->location, "Declaration can't have size 0");
@@ -1710,7 +1743,7 @@ bool resolve_statement(Statement *stmt, Type *ret_type, StatementContext ctx) {
             resolve_statement_block(stmt->while_stmt.body, ret_type, ctx);
             return false;
         case STMT_SWITCH: {
-            ResolvedExpression expr = resolve_expression(stmt->switch_stmt.expr);
+            ResolvedExpression expr = resolve_expression_decayed(stmt->switch_stmt.expr);
             if (!is_integer_type(expr.type)) {
                 fatal_error(stmt->location, "Switch expression not an integer");
             }

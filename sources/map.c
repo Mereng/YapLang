@@ -5,7 +5,7 @@
 #include "tools.h"
 
 uint64_t hash_uint64(uint64_t x) {
-    x *= 0xff51afd7ed558ccdul;
+    x *= 0xff51afd7ed558ccd;
     x ^= x >> 32;
     return x;
 }

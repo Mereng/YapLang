@@ -246,6 +246,22 @@ Expression* expression_sizeof_expr(Expression *sizeof_expr, SrcLocation loc) {
     expr->size_of_expr = sizeof_expr;
     return expr;
 }
+Expression* expression_alignof_type(Typespec *type, SrcLocation loc) {
+    Expression *expr = expression_new(EXPR_ALIGNOF_TYPE, loc);
+    expr->align_of_type = type;
+    return expr;
+}
+Expression* expression_alignof_expr(Expression *alignof_expr, SrcLocation loc) {
+    Expression *expr = expression_new(EXPR_ALIGNOF_EXPR, loc);
+    expr->align_of_expr = alignof_expr;
+    return expr;
+}
+Expression* expression_offsetof(Typespec *type, const char *name, SrcLocation loc) {
+    Expression *expr = expression_new(EXPR_OFFSETOF, loc);
+    expr->offset_of_field.type = type;
+    expr->offset_of_field.name = name;
+    return expr;
+}
 
 Statement* statement_new(StatementKind kind, SrcLocation loc) {
     Statement *stmt = ast_alloc(sizeof(Statement));

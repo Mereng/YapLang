@@ -294,7 +294,10 @@ enum ExpressionKind {
     EXPR_BINARY,
     EXPR_TERNARY,
     EXPR_SIZEOF_TYPE,
-    EXPR_SIZEOF_EXPR
+    EXPR_SIZEOF_EXPR,
+    EXPR_ALIGNOF_TYPE,
+    EXPR_ALIGNOF_EXPR,
+    EXPR_OFFSETOF
 };
 
 typedef enum CompoundFieldKind {
@@ -366,8 +369,14 @@ struct Expression {
             Expression *operand;
             const char *name;
         } field;
-        Typespec *size_of_type;
         Expression *size_of_expr;
+        Typespec *size_of_type;
+        Expression *align_of_expr;
+        Typespec *align_of_type;
+        struct {
+            Typespec *type;
+            const char *name;
+        } offset_of_field;
     };
     SrcLocation location;
 };
@@ -387,6 +396,9 @@ Expression* expression_field(Expression *operand, const char *field, SrcLocation
 Expression* expression_compound(Typespec *type, CompoundField *fields, size_t num_fields, SrcLocation loc);
 Expression* expression_sizeof_type(Typespec *type, SrcLocation loc);
 Expression* expression_sizeof_expr(Expression *sizeof_expr, SrcLocation loc);
+Expression* expression_alignof_type(Typespec *type, SrcLocation loc);
+Expression* expression_alignof_expr(Expression *alignof_expr, SrcLocation loc);
+Expression* expression_offsetof(Typespec *type, const char *name, SrcLocation loc);
 
 enum StatementKind {
     STMT_NONE,
