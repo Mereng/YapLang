@@ -330,3 +330,8 @@ Statement* statement_decl(Declaration *decl, SrcLocation loc) {
     stmt->decl = decl;
     return stmt;
 }
+Statement* statement_attribute(Attribute attr, SrcLocation loc) {
+    Statement *stmt = statement_new(STMT_ATTR, loc);
+    stmt->attribute = attr;
+    return stmt;
+}

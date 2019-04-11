@@ -19,6 +19,7 @@ struct {
     const char *continue_keyword;
     const char *enum_keyword;
     const char *foreign;
+    const char *assert;
 } keywords;
 
 const char **keywords_buf;
@@ -52,6 +53,7 @@ void keywords_init() {
     end_keywords = keywords.enum_keyword;
 
     keywords.foreign = str_intern("foreign");
+    keywords.assert = str_intern("assert");
 }
 
 #undef INIT_KEYWORD

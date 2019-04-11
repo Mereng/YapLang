@@ -10,7 +10,7 @@ uint64_t hash_uint64(uint64_t x) {
     return x;
 }
 
-uint64_t hash_pointer(void *ptr) {
+uint64_t hash_pointer(const void *ptr) {
     return hash_uint64((uintptr_t) ptr);
 }
 
@@ -49,7 +49,7 @@ void map_grow(Map *map, size_t new_cap) {
     *map = new_map;
 }
 
-void map_put(Map *map, void *key, void *val) {
+void map_put(Map *map, const void *key, void *val) {
     assert(key && val);
     if (2 * map->len >= map->cap) {
         map_grow(map, 2 * map->cap);
@@ -70,7 +70,7 @@ void map_put(Map *map, void *key, void *val) {
     }
 }
 
-void* map_get(Map *map, void *key) {
+void* map_get(Map *map, const void *key) {
     if (map->len <= 0) {
         return NULL;
     }

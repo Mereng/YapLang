@@ -402,7 +402,8 @@ enum StatementKind {
     STMT_ASSIGN,
     STMT_AUTO_ASSIGN,
     STMT_EXPR,
-    STMT_DECL
+    STMT_DECL,
+    STMT_ATTR
 };
 
 struct ElseIf {
@@ -455,6 +456,7 @@ struct Statement {
         StatementBlock block;
         Expression *expr;
         Declaration *decl;
+        Attribute attribute;
     };
     SrcLocation location;
 };
@@ -474,4 +476,5 @@ Statement* statement_continue(SrcLocation loc);
 Statement* statement_block(StatementBlock block, SrcLocation loc);
 Statement* statement_expr(Expression *expr, SrcLocation loc);
 Statement* statement_decl(Declaration *decl, SrcLocation loc);
+Statement* statement_attribute(Attribute attr, SrcLocation loc);
 #endif

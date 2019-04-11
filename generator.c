@@ -9,6 +9,7 @@ const char **gen_header_buf;
 const char *gen_init = "#include <stdbool.h>\n"
                        "#include <stdint.h>\n"
                        "#include <stddef.h>\n"
+                       "#include <assert.h>\n"
                        "\n"
                        "typedef signed char schar;\n"
                        "typedef unsigned char uchar;\n"
@@ -469,6 +470,14 @@ void generate_statement(Statement *stmt) {
                 genlnf("}");
             }
             genlnf("}");
+            break;
+        case STMT_ATTR:
+            if (stmt->attribute.name == keywords.assert) {
+                genlnf("assert(");
+                assert(stmt->attribute.num_args == 1);
+                generate_expression(stmt->attribute.args[0].expr);
+                genf(");");
+            }
             break;
         case STMT_RETURN:
             genlnf("return");

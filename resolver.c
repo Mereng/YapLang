@@ -1,6 +1,3 @@
-
-#include <ast.h>
-
 DeclarationList *global_declaration_list;
 
 Type *type_void = &(Type){TYPE_VOID, 0};
@@ -21,6 +18,7 @@ Type *type_double = &(Type){TYPE_DOUBLE, 8, 8};
 
 #define type_usize type_ullong
 #define type_size type_llong
+#define type_uintptr type_ullong
 
 Type *type_pointer(Type *base);
 void complete_type(Type *type);
@@ -553,6 +551,9 @@ void complete_type(Type *type) {
     for (AggregateItem *it = decl->aggregate.items; it != decl->aggregate.items + decl->aggregate.num_items; it++) {
         Type *item_type = resolve_typespec(it->type);
         complete_type(item_type);
+        if (item_type->size == 0) {
+            fatal_error(it->location, "Field type of size 0 is not allowed");
+        }
         for (const char **name = it->names; name != it->names + it->num_names; name++) {
             buf_push(fields, ((TypeField){*name, item_type}));
         }
@@ -1760,6 +1761,16 @@ bool resolve_statement(Statement *stmt, Type *ret_type, StatementContext ctx) {
                 }
             }
             return true;
+        case STMT_ATTR:
+            if (stmt->attribute.name == keywords.assert) {
+                if (stmt->attribute.num_args != 1) {
+                    fatal_error(stmt->location, "#assert takes 1 argument");
+                }
+                resolve_conditional_expression(stmt->attribute.args[0].expr);
+            } else {
+                warning(stmt->location, "Unknown attribute '%s'", stmt->location.name);
+            }
+            return false;
         case STMT_BREAK:
             if (!ctx.break_legal) {
                 fatal_error(stmt->location, "Illegal break");
@@ -2027,6 +2038,10 @@ void init_entities() {
     entity_append_typedef("uint32", type_uint);
     entity_append_typedef("int64", type_llong);
     entity_append_typedef("uint64", type_ullong);
+
+    entity_append_typedef("usize", type_usize);
+    entity_append_typedef("size", type_size);
+    entity_append_typedef("uintptr", type_uintptr);
 
     entity_append_const("true", type_bool, (Value) {.b = true});
     entity_append_const("false", type_bool, (Value) {.b = false});

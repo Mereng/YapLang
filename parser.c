@@ -286,6 +286,34 @@ Typespec *parse_type() {
     return type;
 }
 
+AttributeArgument parse_attribute_argument() {
+    SrcLocation loc = token.location;
+    Expression *expr = parse_expression();
+    const char *name = NULL;
+    if (match_token(TOKEN_ASSIGN)) {
+        if (expr->kind != EXPR_NAME) {
+            error_here("Left operand of = in attribute argument must be name");
+        }
+        name = expr->name;
+        expr = parse_expression();
+    }
+    return (AttributeArgument) {.location = loc, .name = name, .expr = expr};
+}
+
+Attribute parse_attribute() {
+    SrcLocation loc = token.location;
+    const char *name = parse_name();
+    AttributeArgument *args = NULL;
+    if (match_token(TOKEN_LPAREN)) {
+        buf_push(args, parse_attribute_argument());
+        while (match_token(TOKEN_COMMA)) {
+            buf_push(args, parse_attribute_argument());
+        }
+        expect_token(TOKEN_RPAREN);
+    }
+    return attribute_new(name, ast_dup(args, buf_sizeof(args)), buf_len(args), loc);
+}
+
 StatementBlock parse_statement_block() {
     expect_token(TOKEN_LBRACE);
     Statement **stmts = NULL;
@@ -453,6 +481,10 @@ Statement* parse_statement() {
         return statement_continue(location);
     } else if (is_token(TOKEN_LBRACE)) {
         return statement_block(parse_statement_block(), location);
+    } else if (match_token(TOKEN_POUND)) {
+        Attribute attr = parse_attribute();
+        expect_token(TOKEN_SEMICOLON);
+        return statement_attribute(attr, location);
     } else {
         Statement *stmt = parse_statement_simple();
         expect_token(TOKEN_SEMICOLON);
@@ -603,33 +635,6 @@ Declaration* parse_declaration_func(SrcLocation location) {
     return decl;
 }
 
-AttributeArgument parse_attribute_argument() {
-     SrcLocation loc = token.location;
-     Expression *expr = parse_expression();
-     const char *name = NULL;
-     if (match_token(TOKEN_ASSIGN)) {
-         if (expr->kind != EXPR_NAME) {
-             error_here("Left operand of = in attribute argument must be name");
-         }
-         name = expr->name;
-         expr = parse_expression();
-     }
-    return (AttributeArgument) {.location = loc, .name = name, .expr = expr};
-}
-
-Attribute parse_attribute() {
-    SrcLocation loc = token.location;
-    const char *name = parse_name();
-    AttributeArgument *args = NULL;
-    if (match_token(TOKEN_LPAREN)) {
-        buf_push(args, parse_attribute_argument());
-        while (match_token(TOKEN_COMMA)) {
-            buf_push(args, parse_attribute_argument());
-        }
-        expect_token(TOKEN_RPAREN);
-    }
-    return attribute_new(name, ast_dup(args, buf_sizeof(args)), buf_len(args), loc);
-}
 
 AttributeList parse_attribute_list() {
     Attribute *attrs = NULL;
