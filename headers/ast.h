@@ -293,6 +293,7 @@ enum ExpressionKind {
     EXPR_UNARY,
     EXPR_BINARY,
     EXPR_TERNARY,
+    EXPR_MODIFY,
     EXPR_SIZEOF_TYPE,
     EXPR_SIZEOF_EXPR,
     EXPR_ALIGNOF_TYPE,
@@ -357,6 +358,11 @@ struct Expression {
             Expression *else_ex;
         } ternary;
         struct {
+            TokenKind op;
+            bool is_post;
+            Expression *operand;
+        } modify;
+        struct {
             Expression *operand;
             Expression **args;
             size_t num_args;
@@ -390,6 +396,7 @@ Expression* expression_cast(Typespec *cast_type, Expression *cast_expr, SrcLocat
 Expression* expression_unary(TokenKind operator, Expression *operand, SrcLocation loc);
 Expression* expression_binary(TokenKind operator, Expression *left, Expression *right, SrcLocation loc);
 Expression* expression_ternary(Expression *cond, Expression *then_expr, Expression *else_expr, SrcLocation loc);
+Expression* expression_modify(TokenKind op, bool is_post, Expression *operand, SrcLocation loc);
 Expression* expression_call(Expression *operand, Expression **args, size_t num_args, SrcLocation loc);
 Expression* expression_index(Expression *operand, Expression *index, SrcLocation loc);
 Expression* expression_field(Expression *operand, const char *field, SrcLocation loc);

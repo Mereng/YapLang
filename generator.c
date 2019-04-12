@@ -329,6 +329,17 @@ void generate_expression(Expression *expr) {
             generate_expression(expr->ternary.else_ex);
             genf(")");
             break;
+        case EXPR_MODIFY:
+            if (!expr->modify.is_post) {
+                genf("%s", token_kind_names[expr->modify.op]);
+            }
+            genf("(");
+            generate_expression(expr->modify.operand);
+            genf(")");
+            if (expr->modify.is_post) {
+                genf("%s", token_kind_names[expr->modify.op]);
+            }
+            break;
         case EXPR_SIZEOF_EXPR:
             genf("sizeof(");
             generate_expression(expr->size_of_expr);
@@ -397,12 +408,8 @@ void generate_simple_statement(Statement *stmt) {
             genf("(");
             generate_expression(stmt->assign.left);
             genf(")");
-            if (stmt->assign.right) {
-                genf(" %s ", token_kind_names[stmt->assign.op]);
-                generate_expression(stmt->assign.right);
-            } else {
-                genf("%s", token_kind_names[stmt->assign.op]);
-            }
+            genf("%s", token_kind_names[stmt->assign.op]);
+            generate_expression(stmt->assign.right);
             break;
         default:
             assert(0);

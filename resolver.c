@@ -1358,6 +1358,23 @@ ResolvedExpression resolve_expression_ternary(Expression *expr, Type *expected_t
     }
 }
 
+ResolvedExpression resolve_expression_modify(Expression *expr) {
+    ResolvedExpression operand = resolve_expression(expr->modify.operand);
+    Type *type = operand.type;
+    complete_type(type);
+    if (!operand.is_lvalue) {
+        fatal_error(expr->location, "Can't modify non-lvalue");
+    }
+    if (type->is_nonmodify) {
+        fatal_error(expr->location, "Can't modify const type");
+    }
+
+    if (!is_integer_type(type) && type->kind != TYPE_POINTER) {
+        fatal_error(expr->location, "Type of operand of %s is not valid, must be integer or pointer", expr->modify.op);
+    }
+    return resolved_rvalue(type);
+}
+
 ResolvedExpression resolve_expression_index(Expression *expr) {
     ResolvedExpression operand = resolve_expression_decayed(expr->index.operand);
     if (operand.type->kind != TYPE_POINTER) {
@@ -1586,6 +1603,9 @@ ResolvedExpression resolve_expression_expected_type(Expression *expr, Type *expe
         case EXPR_TERNARY:
             resolved = resolve_expression_ternary(expr, expected_type);
             break;
+        case EXPR_MODIFY:
+            resolved = resolve_expression_modify(expr);
+            break;
         case EXPR_INDEX:
             resolved = resolve_expression_index(expr);
             break;
@@ -1673,31 +1693,25 @@ void resolve_statement_assign(Statement *stmt) {
     if (left.type->is_nonmodify) {
         fatal_error(stmt->location, "lvalue has non-modifiable type");
     }
-    if (stmt->assign.right) {
-        const char *op_name = token_kind_names[stmt->assign.op];
-        TokenKind op_binary = map_assign_token_binary_token[stmt->assign.op];
-        ResolvedExpression right = resolve_expression_decayed_expected_type(stmt->assign.right, left.type);
-        ResolvedExpression result;
-        if (stmt->assign.op == TOKEN_ASSIGN) {
-            result = right;
-        } else if (stmt->assign.op == TOKEN_ADD_ASSIGN || stmt->assign.op == TOKEN_SUB_ASSIGN){
-            if (left.type->kind == TYPE_POINTER && is_integer_type(right.type)) {
-                result = resolved_rvalue(left.type);
-            } else if (is_math_type(left.type) && is_math_type(right.type)) {
-                result = resolve_expression_binary_op(op_binary, op_name, left, right, stmt->location);
-            } else {
-                fatal_error(stmt->location, "Invalid operand types for %s", op_name);
-            }
-        } else {
+    const char *op_name = token_kind_names[stmt->assign.op];
+    TokenKind op_binary = map_assign_token_binary_token[stmt->assign.op];
+    ResolvedExpression right = resolve_expression_decayed_expected_type(stmt->assign.right, left.type);
+    ResolvedExpression result;
+    if (stmt->assign.op == TOKEN_ASSIGN) {
+        result = right;
+    } else if (stmt->assign.op == TOKEN_ADD_ASSIGN || stmt->assign.op == TOKEN_SUB_ASSIGN){
+        if (left.type->kind == TYPE_POINTER && is_integer_type(right.type)) {
+            result = resolved_rvalue(left.type);
+        } else if (is_math_type(left.type) && is_math_type(right.type)) {
             result = resolve_expression_binary_op(op_binary, op_name, left, right, stmt->location);
-        }
-        if (!convert_expression(&result, left.type)) {
-            fatal_error(stmt->location, "Illegal conversion right to left operand");
+        } else {
+            fatal_error(stmt->location, "Invalid operand types for %s", op_name);
         }
     } else {
-        if (!(is_integer_type(left.type) || left.type->kind == TYPE_POINTER)) {
-            fatal_error(stmt->location, "%s can only used with integer or pointer types", stmt->assign.op)
-        }
+        result = resolve_expression_binary_op(op_binary, op_name, left, right, stmt->location);
+    }
+    if (!convert_expression(&result, left.type)) {
+        fatal_error(stmt->location, "Illegal conversion right to left operand");
     }
 }
 

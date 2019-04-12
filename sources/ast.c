@@ -208,6 +208,12 @@ Expression* expression_ternary(Expression *cond, Expression *then_expr, Expressi
     expr->ternary.else_ex = else_expr;
     return expr;
 }
+Expression* expression_modify(TokenKind op, bool is_post, Expression *operand, SrcLocation loc) {
+    Expression *expr = expression_new(EXPR_MODIFY, loc);
+    expr->modify.op = op;
+    expr->modify.is_post = is_post;
+    expr->modify.operand = operand;
+}
 Expression* expression_call(Expression *operand, Expression **args, size_t num_args, SrcLocation loc) {
     Expression *expr = expression_new(EXPR_CALL, loc);
     expr->call.operand = operand;

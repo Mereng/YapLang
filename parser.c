@@ -120,7 +120,8 @@ Expression* parse_expression_operand() {
 
 Expression* parse_expression_base() {
     Expression *expr = parse_expression_operand();
-    while (is_token(TOKEN_LPAREN) || is_token(TOKEN_LBRACKET) || is_token(TOKEN_DOT)) {
+    while (is_token(TOKEN_LPAREN) || is_token(TOKEN_LBRACKET) || is_token(TOKEN_DOT) || is_token(TOKEN_INC) ||
+            is_token(TOKEN_DEC)) {
         if (match_token(TOKEN_LPAREN)) {
             Expression **args = NULL;
             if (!is_token(TOKEN_RPAREN)) {
@@ -135,11 +136,15 @@ Expression* parse_expression_base() {
             Expression *index = parse_expression();
             expect_token(TOKEN_RBRACKET);
             expr = expression_index(expr, index, token.location);
-        } else {
+        } else if (is_token(TOKEN_DOT)) {
             next_token();
             const char *field = token.name;
             expect_token(TOKEN_NAME);
             expr = expression_field(expr, field, token.location);
+        } else {
+            TokenKind op = token.kind;
+            next_token();
+            expr = expression_modify(op, true, expr, token.location);
         }
     }
     return expr;
@@ -147,10 +152,15 @@ Expression* parse_expression_base() {
 
 Expression* parse_expression_unary() {
     if (is_token(TOKEN_ADD) || is_token(TOKEN_SUB) || is_token(TOKEN_MUL) || is_token(TOKEN_BIN_AND) || is_token(TOKEN_BIN_NOT) ||
-        is_token(TOKEN_NOT)) {
+        is_token(TOKEN_NOT) || is_token(TOKEN_INC) || is_token(TOKEN_DEC)) {
+        SrcLocation loc = token.location;
         TokenKind op = token.kind;
         next_token();
-        return expression_unary(op, parse_expression_unary(), token.location);
+        if (op == TOKEN_INC || op == TOKEN_DEC) {
+            return expression_modify(op, false, parse_expression_unary(), loc);
+        } else {
+            return expression_unary(op, parse_expression_unary(), loc);
+        }
     } else {
         return parse_expression_base();
     }
@@ -366,10 +376,6 @@ Statement* parse_statement_simple() {
         TokenKind op = token.kind;
         next_token();
         stmt = statement_assign(op, expr, parse_expression(), loc);
-    } else if (is_token(TOKEN_INC) || is_token(TOKEN_DEC)) {
-        TokenKind op = token.kind;
-        next_token();
-        stmt = statement_assign(op, expr, NULL, loc);
     } else {
         stmt = statement_expr(expr, loc);
     }
