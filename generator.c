@@ -598,16 +598,6 @@ void generate_aggregate(Declaration *decl) {
     genlnf("};");
 }
 
-void generate_enum(Declaration *decl) {
-    genlnf("typedef enum %s {", decl->name);
-    gen_indent++;
-    for (size_t i = 0; i < decl->enum_delc.num_items; i++) {
-        genlnf("%s,", decl->enum_delc.items[i].name);
-    }
-    gen_indent--;
-    genlnf("} %s;", decl->name);
-}
-
 bool is_array_typespec_incomplete(Typespec *typespec) {
     return typespec->kind == TYPESPEC_ARRAY && !typespec->size;
 }
@@ -651,7 +641,7 @@ void generate_declaration(Entity *entity) {
             genlnf("typedef %s;", typespec_to_cdecl(decl->typedef_decl.type, entity->name));
             break;
         case DECL_ENUM:
-            generate_enum(decl);
+            genlnf("typedef int %s;", decl->name);
             break;
         default:
             assert(0);

@@ -215,7 +215,8 @@ bool cast_expression(ResolvedExpression *operand, Type *type) {
 bool convert_expression(ResolvedExpression *operand, Type *type) {
     if (is_convertible(operand, type)) {
         cast_expression(operand, type);
-        *operand = resolved_rvalue(operand->type);
+        operand->type = unqualify_type(operand->type);
+        operand->is_lvalue = false;
         return true;
     }
     return false;
@@ -680,12 +681,21 @@ Entity* entity_append_declaration(Declaration *declaration) {
         entity->state = ENTITY_RESOLVED;
         entity->type = type_enum(entity);
         buf_push(entities_ordered, entity);
+        Typespec *enum_type = typespec_name(str_intern("int"), declaration->location);
+        const char *prev_item_name = NULL;
         for (size_t i = 0; i < declaration->enum_delc.num_items; i++) {
             EnumItem item = declaration->enum_delc.items[i];
+            Expression *init;
             if (item.init) {
-                fatal_error(item.location, "Enum constant initializers are not currently supported");
+                init = item.init;
+            } else if (prev_item_name) {
+                init = expression_binary(TOKEN_ADD, expression_name(prev_item_name, item.location),
+                        expression_int(1, 0, 0, item.location), item.location);
+            } else {
+                init = expression_int(0, 0, 0, item.location);
             }
-            entity_append_const(item.name, entity->type, (Value) {.i = i});
+            entity_append_declaration(declaration_const(item.name, init, enum_type, item.location));
+            prev_item_name = item.name;
         }
     }
     return entity;
