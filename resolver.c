@@ -1016,10 +1016,10 @@ typedef struct StatementContext {
 
 bool resolve_statement(Statement *stmt, Type *ret_type, StatementContext ctx);
 
-ResolvedExpression resolve_expression_name(Expression *expr) {
-    Entity *entity = resolve_entity_name(expr->name);
+ResolvedExpression resolve_name(const char *name, SrcLocation loc) {
+    Entity *entity = resolve_entity_name(name);
     if (!entity) {
-        fatal_error(expr->location, "Name does %s not exists", expr->name);
+        fatal_error(loc, "Name does %s not exists", name);
     }
     if (entity->kind == ENTITY_VAR) {
         return resolved_lvalue(entity->type);
@@ -1028,8 +1028,12 @@ ResolvedExpression resolve_expression_name(Expression *expr) {
     } else if (entity->kind == ENTITY_FUNC) {
         return resolved_rvalue(entity->type);
     } else {
-        fatal_error(expr->location, "%s must be var or const", expr->name);
+        fatal_error(loc, "%s must be var or const", name);
     }
+}
+
+ResolvedExpression resolve_expression_name(Expression *expr) {
+    return resolve_name(expr->name, expr->location);
 }
 
 ResolvedExpression resolve_unary(TokenKind op, ResolvedExpression operand) {
@@ -1692,10 +1696,15 @@ ResolvedExpression resolve_expression_decayed_expected_type(Expression *expr, Ty
     return resolved_decay(resolve_expression_expected_type(expr, expected_type));
 }
 
+bool is_conditional_expression(ResolvedExpression expr) {
+    expr = resolved_decay(expr);
+    return is_scalar_type(expr.type);
+}
+
 void resolve_conditional_expression(Expression *expr) {
     ResolvedExpression cond = resolve_expression_decayed(expr);
-    if (!is_scalar_type(cond.type)) {
-        fatal_error(expr->location, "Conditional expression must have mathematics or pointer type");
+    if (!is_conditional_expression(cond)) {
+        fatal_error(expr->location, "Conditional expression must be scalar type");
     }
 }
 
@@ -1752,7 +1761,15 @@ void resolve_statement_assign(Statement *stmt) {
 bool resolve_statement(Statement *stmt, Type *ret_type, StatementContext ctx) {
     switch (stmt->kind) {
         case STMT_IF: {
-            resolve_conditional_expression(stmt->if_stmt.cond);
+            Entity *entities = local_scope_enter();
+            if (stmt->if_stmt.init) {
+                resolve_statement_auto_assign(stmt->if_stmt.init);
+            }
+            if (stmt->if_stmt.cond) {
+                resolve_conditional_expression(stmt->if_stmt.cond);
+            } else if (!is_conditional_expression(resolve_name(stmt->if_stmt.init->auto_assign.name, stmt->location))) {
+                    fatal_error(stmt->location, "Conditional expression must be scalar type");
+            }
             bool returns = resolve_statement_block(stmt->if_stmt.then, ret_type, ctx);
             for (size_t i = 0; i < stmt->if_stmt.num_else_ifs; i++) {
                 ElseIf else_if = stmt->if_stmt.else_ifs[i];
@@ -1764,6 +1781,7 @@ bool resolve_statement(Statement *stmt, Type *ret_type, StatementContext ctx) {
             } else {
                 returns = false;
             }
+            local_scope_leave(entities);
             return returns;
         }
         case STMT_FOR: {

@@ -411,8 +411,18 @@ void generate_statement(Statement *stmt) {
     generate_sync_location(stmt->location);
     switch (stmt->kind) {
         case STMT_IF:
+            if (stmt->if_stmt.init) {
+                genlnf("{");
+                gen_indent++;
+                generate_statement(stmt->if_stmt.init);
+            }
+            generate_sync_location(stmt->location);
             genlnf("if (");
-            generate_expression(stmt->if_stmt.cond);
+            if (stmt->if_stmt.cond) {
+                generate_expression(stmt->if_stmt.cond);
+            } else {
+                genf("%s", stmt->if_stmt.init->auto_assign.name);
+            }
             genf(") ");
             generate_statement_block(stmt->if_stmt.then);
             for (size_t i = 0; i < stmt->if_stmt.num_else_ifs; i++) {
@@ -426,6 +436,10 @@ void generate_statement(Statement *stmt) {
             if (stmt->if_stmt.else_body.statements) {
                 genf(" else ");
                 generate_statement_block(stmt->if_stmt.else_body);
+            }
+            if (stmt->if_stmt.init) {
+                gen_indent--;
+                genlnf("}");
             }
             break;
         case STMT_WHILE:

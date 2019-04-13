@@ -441,6 +441,7 @@ struct Statement {
     StatementKind kind;
     union {
         struct {
+            Statement *init;
             Expression *cond;
             StatementBlock then;
             ElseIf *else_ifs;
@@ -481,7 +482,7 @@ struct Statement {
 };
 
 Statement* statement_new(StatementKind kind, SrcLocation loc);
-Statement* statement_if(Expression *cond, StatementBlock then, ElseIf *else_ifs, size_t num_else_ifs,
+Statement* statement_if(Statement *init, Expression *cond, StatementBlock then, ElseIf *else_ifs, size_t num_else_ifs,
                         StatementBlock else_body, SrcLocation loc);
 Statement* statement_for(Statement *init, Expression *cond, Statement *next, StatementBlock body, SrcLocation loc);
 Statement* statement_while(Expression *cond, StatementBlock body, SrcLocation loc);

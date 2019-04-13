@@ -275,9 +275,10 @@ Statement* statement_new(StatementKind kind, SrcLocation loc) {
     stmt->location = loc;
     return stmt;
 }
-Statement* statement_if(Expression *cond, StatementBlock then, ElseIf *else_ifs, size_t num_else_ifs,
+Statement* statement_if(Statement *init, Expression *cond, StatementBlock then, ElseIf *else_ifs, size_t num_else_ifs,
                         StatementBlock else_body, SrcLocation loc) {
     Statement *stmt = statement_new(STMT_IF, loc);
+    stmt->if_stmt.init = init;
     stmt->if_stmt.cond = cond;
     stmt->if_stmt.then = then;
     stmt->if_stmt.else_ifs = else_ifs;

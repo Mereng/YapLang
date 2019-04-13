@@ -353,15 +353,12 @@ StatementBlock parse_statement_block() {
     return (StatementBlock){ast_dup(stmts, buf_sizeof(stmts)), buf_len(stmts)};
 }
 
-Statement* parse_statement_simple() {
-    Expression *expr = parse_expression();
-    SrcLocation loc = expr->location;
-    Statement *stmt;
+Statement* parse_init_statement(Expression *expr) {
     if (match_token(TOKEN_AUTO_ASSIGN)) {
         if (expr->kind != EXPR_NAME) {
             fatal_syntax("operator := must be preceded by a name");
         }
-        stmt = statement_auto_assign(expr->name, NULL, parse_expression(), loc);
+        return statement_auto_assign(expr->name, NULL, parse_expression(), expr->location);
     } else if (match_token(TOKEN_COLON)) {
         if (expr->kind != EXPR_NAME) {
             fatal_syntax("operator = must be preceded by a name");
@@ -371,19 +368,41 @@ Statement* parse_statement_simple() {
         if (match_token(TOKEN_ASSIGN)) {
             init = parse_expression();
         }
-        stmt = statement_auto_assign(expr->name, type, init, loc);
-    } else if (TOKEN_START_ASSIGN <= token.kind && token.kind <= TOKEN_END_ASSIGN) {
-        TokenKind op = token.kind;
-        next_token();
-        stmt = statement_assign(op, expr, parse_expression(), loc);
+        return statement_auto_assign(expr->name, type, init, expr->location);
     } else {
-        stmt = statement_expr(expr, loc);
+        return NULL;
+    }
+}
+
+Statement* parse_statement_simple() {
+    Expression *expr = parse_expression();
+    SrcLocation loc = expr->location;
+    Statement *stmt = parse_init_statement(expr);
+    if (!stmt) {
+        if (TOKEN_START_ASSIGN <= token.kind && token.kind <= TOKEN_END_ASSIGN) {
+            TokenKind op = token.kind;
+            next_token();
+            stmt = statement_assign(op, expr, parse_expression(), loc);
+        } else {
+            stmt = statement_expr(expr, loc);
+        }
     }
     return stmt;
 }
 
 Statement* parse_statement_if(SrcLocation location) {
-    Expression *cond = parse_expression_paren();
+    expect_token(TOKEN_LPAREN);
+    Expression *cond = parse_expression();
+    Statement *init = parse_init_statement(cond);
+    if (init) {
+        if (match_token(TOKEN_SEMICOLON)) {
+            cond = parse_expression();
+        } else {
+            cond = NULL;
+        }
+    }
+
+    expect_token(TOKEN_RPAREN);
     StatementBlock then = parse_statement_block();
     StatementBlock else_block = {0};
     ElseIf *else_ifs = NULL;
@@ -397,7 +416,7 @@ Statement* parse_statement_if(SrcLocation location) {
         StatementBlock else_if_block = parse_statement_block();
         buf_push(else_ifs, ((ElseIf){else_if_cond, else_if_block}));
     }
-    return statement_if(cond, then, ast_dup(else_ifs, buf_sizeof(else_ifs)), buf_len(else_ifs), else_block, location);
+    return statement_if(init, cond, then, ast_dup(else_ifs, buf_sizeof(else_ifs)), buf_len(else_ifs), else_block, location);
 }
 
 Statement* parse_statement_for(SrcLocation location) {
