@@ -378,6 +378,17 @@ void set_resolved_type(void *key, Type *type) {
     map_put(&resolved_type_map, key, type);
 }
 
+Map resolved_expected_type;
+
+Type* get_resolved_expected_type(Expression *expr) {
+    return map_get(&resolved_expected_type, expr);
+}
+
+void set_resolved_expected_type(Expression *expr, Type *type) {
+    map_put(&resolved_expected_type, expr, type);
+}
+
+
 Type* unqualify_type(Type *type) {
     if (type->kind == TYPE_CONST) {
         return type->base;
@@ -956,6 +967,48 @@ ResolvedExpression resolve_const_expression(Expression *expr);
 ResolvedExpression resolve_expression_decayed(Expression *expr);
 ResolvedExpression resolve_expression_decayed_expected_type(Expression *expr, Type *expected_type);
 
+
+Type* resolve_typed_init(Type *type, Expression *expr) {
+    Type *expected = unqualify_type(type);
+    ResolvedExpression operand = resolve_expression_expected_type(expr, expected);
+    if (type->kind == TYPE_ARRAY && operand.type->kind == TYPE_ARRAY && type->base == operand.type->base
+        && !type->num_elements) {
+
+    } else {
+        if (type && type->kind == TYPE_POINTER) {
+            operand = resolved_decay(operand);
+        }
+
+        if (!convert_expression(&operand, expected)) {
+            return NULL;
+        }
+    }
+    set_resolved_expected_type(expr, operand.type);
+    return operand.type;
+}
+
+Type *resolve_init(Typespec *typespec, Expression *expr, SrcLocation loc) {
+    Type *type;
+    if (typespec) {
+        type = resolve_typespec(typespec);
+        if (expr) {
+            type = resolve_typed_init(type, expr);
+            if (!type) {
+                fatal_error(loc, "Invalid type in initialization");
+            }
+        }
+    } else {
+        type = unqualify_type(resolve_expression(expr).type);
+        set_resolved_expected_type(expr, type);
+    }
+    complete_type(type);
+    if (type->size == 0) {
+        fatal_error(loc, "Can't declare variable of size 0");
+    }
+    return type;
+}
+
+
 typedef struct StatementContext {
     bool break_legal;
     bool continue_legal;
@@ -1232,8 +1285,7 @@ ResolvedExpression resolve_expression_compound(Expression *expr, Type *expected_
                 fatal_error(field.location, "Field initializer in struct or union compound out of range");
             }
             Type *field_type = type->aggregate.fields[index].type;
-            ResolvedExpression init = resolve_expression_decayed_expected_type(field.init, field_type);
-            if (!convert_expression(&init, field_type)) {
+            if (!resolve_typed_init(field_type, field.init)) {
                 fatal_error(field.location, "Illegal conversion");
             }
             index++;
@@ -1263,7 +1315,7 @@ ResolvedExpression resolve_expression_compound(Expression *expr, Type *expected_
             }
             ResolvedExpression init_val = resolve_expression_decayed_expected_type(expr->compound.fields[i].init,
                     type->base);
-            if (!convert_expression(&init_val, type->base)) {
+            if (!resolve_typed_init(type->base, field.init)) {
                 fatal_error(field.location, "Illegal conversion in initializer");
             }
             index_max = MAX(index_max, index);
@@ -1658,25 +1710,7 @@ bool resolve_statement_block(StatementBlock block, Type *ret_type, StatementCont
 }
 
 void resolve_statement_auto_assign(Statement *stmt) {
-    Type *type = NULL;
-    if (stmt->auto_assign.type) {
-        type = resolve_typespec(stmt->auto_assign.type);
-        if (stmt->auto_assign.init) {
-            Type *expected = unqualify_type(type);
-            ResolvedExpression expr = resolve_expression_expected_type(stmt->auto_assign.init, expected);
-            if (type->kind == TYPE_ARRAY && expr.type->kind == TYPE_ARRAY && type->base == expr.type->base &&
-                !type->num_elements) {
-                type = expr.type;
-            } else if (!convert_expression(&expr, expected)) {
-                fatal_error(stmt->location, "Initialization expression not expected type");
-            }
-        }
-    } else {
-        type = unqualify_type(resolve_expression(stmt->auto_assign.init).type);
-    }
-    if (type->size == 0) {
-        fatal_error(stmt->location, "Declaration can't have size 0");
-    }
+    Type *type = resolve_init(stmt->auto_assign.type, stmt->auto_assign.init, stmt->location);
     if (!local_entities_push_var(stmt->auto_assign.name, type)) {
         fatal_error(stmt->location, "Duplicate definition");
     }
@@ -1911,31 +1945,7 @@ Type* resolve_declaration_type(Declaration *decl) {
 }
 
 Type* resolve_declaration_var(Declaration *decl) {
-    Type *type = NULL;
-
-    if (decl->var.type) {
-        type = resolve_typespec(decl->var.type);
-    }
-
-    if (decl->var.expr) {
-        ResolvedExpression result = resolve_expression_expected_type(decl->var.expr, type);
-        if (type && result.type != type) {
-            if (!(type->kind == TYPE_ARRAY && result.type->kind == TYPE_ARRAY && type->base == result.type->base
-                && !type->num_elements)) {
-                if (!convert_expression(&result, type)) {
-                    fatal_error(decl->location, "Illegal conversion in variable initializer");
-                }
-            }
-        }
-
-        type = result.type;
-    }
-
-    complete_type(type);
-    if (type->size == 0) {
-        fatal_error(decl->location, "Declaration can't have size 0");
-    }
-    return type;
+    return resolve_init(decl->var.type, decl->var.expr, decl->location);
 }
 
 Type* resolve_declaration_const(Declaration *decl, Value *val) {

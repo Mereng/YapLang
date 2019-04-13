@@ -214,17 +214,15 @@ void generate_sync_location(SrcLocation location) {
     }
 }
 
-void generate_init_expression(Expression *expr);
-
-void generate_expression_compound(Expression *expr, bool is_auto_assign) {
-    if (is_auto_assign) {
+void generate_expression_compound(Expression *expr) {
+    Type *expected = get_resolved_expected_type(expr);
+    if (expected && expected->kind != TYPE_POINTER) {
         genf("{");
     } else if (expr->compound.type) {
         genf("(%s){", typespec_to_cdecl(expr->compound.type, ""));
     } else {
         genf("(%s){", type_to_cdecl(get_resolved_type(expr), ""));
     }
-
     for (size_t i = 0; i < expr->compound.num_fields; i++) {
         if (i != 0) {
             genf(", ");
@@ -237,7 +235,7 @@ void generate_expression_compound(Expression *expr, bool is_auto_assign) {
             generate_expression(field.index);
             genf("] = ");
         }
-        generate_init_expression(field.init);
+        generate_expression(field.init);
     }
 
     if (expr->compound.num_fields == 0) {
@@ -306,7 +304,7 @@ void generate_expression(Expression *expr) {
             genf("%s%s", get_resolved_type(expr->field.operand)->kind == TYPE_POINTER ? "->" : ".", expr->field.name);
             break;
         case EXPR_COMPOUND:
-            generate_expression_compound(expr, false);
+            generate_expression_compound(expr);
             break;
         case EXPR_UNARY:
             genf("%s(", token_kind_names[expr->unary.op]);
@@ -375,14 +373,6 @@ void generate_statement_block(StatementBlock block) {
     genlnf("}");
 }
 
-void generate_init_expression(Expression *expr) {
-    if (expr->kind == EXPR_COMPOUND) {
-        generate_expression_compound(expr, true);
-    } else {
-        generate_expression(expr);
-    }
-}
-
 void generate_simple_statement(Statement *stmt) {
     switch (stmt->kind) {
         case STMT_EXPR:
@@ -397,11 +387,11 @@ void generate_simple_statement(Statement *stmt) {
                 }
                 if (stmt->auto_assign.init) {
                     genf(" = ");
-                    generate_init_expression(stmt->auto_assign.init);
+                    generate_expression(stmt->auto_assign.init);
                 }
             } else {
                 genf("%s = ", type_to_cdecl(unqualify_type(get_resolved_type(stmt->auto_assign.init)), stmt->auto_assign.name));
-                generate_init_expression(stmt->auto_assign.init);
+                generate_expression(stmt->auto_assign.init);
             }
             break;
         case STMT_ASSIGN:
@@ -681,7 +671,7 @@ void generate_definitions() {
             }
             if (decl->var.expr) {
                 genf(" = ");
-                generate_init_expression(decl->var.expr);
+                generate_expression(decl->var.expr);
             }
             genf(";");
         }
