@@ -166,7 +166,7 @@ void generate_char(char c) {
     } else if (isprint(c)) {
         genf("'%c'", c);
     } else {
-        genf("'\\x%x'", c);
+        genf("'\\x%X'", (unsigned char)c);
     }
 }
 
@@ -187,12 +187,12 @@ void generate_string(const char *str, bool multiline) {
         if (*str) {
             if (char_to_escape[*(unsigned char*)str]) {
                 genf("\\%c", char_to_escape[*(unsigned char *) str]);
-                if (str[0] == '\n' && str[1]) {
+                if (str[0] == '\n' && str[1] && multiline) {
                     genf("\"");
                     genlnf("\"");
                 }
             } else {
-                genf("\\x%x", *str);
+                genf("\\x%X", (unsigned char)*str);
             }
             str++;
         }
