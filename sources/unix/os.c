@@ -1,5 +1,6 @@
 #include <dirent.h>
 #include <malloc.h>
+#include <stdlib.h>
 
 #include "os.h"
 
@@ -39,4 +40,11 @@ DirectoryIterator* dir_new(const char *path) {
     path_copy(it->base, path);
     it->is_valid = true;
     dir_next(it);
+    return it;
+}
+
+void path_absolute(char path[PATH_MAX]) {
+    char rel_path[PATH_MAX];
+    path_copy(rel_path, path);
+    realpath(rel_path, path);
 }

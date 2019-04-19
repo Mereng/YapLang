@@ -22,9 +22,14 @@ typedef struct DirectoryIterator {
 DirectoryIterator* dir_new(const char *path);
 void dir_free(DirectoryIterator *it);
 void dir_next(DirectoryIterator *it);
+bool dir_is_excluded(DirectoryIterator *it);
+bool dir_subdir(DirectoryIterator *it);
 
 void path_normalize(char *path);
 bool path_copy(char path[PATH_MAX], const char *src);
-bool dir_is_excluded(DirectoryIterator *it);
+void path_absolute(char path[PATH_MAX]);
+void path_join(char path[PATH_MAX], const char *src);
+char* path_filename(char path[PATH_MAX]);
+char* path_ext(char path[PATH_MAX]);
 
 #endif

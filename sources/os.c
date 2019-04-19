@@ -1,5 +1,6 @@
 #include <memory.h>
 #include <string.h>
+#include <stdio.h>
 
 #include "os.h"
 #include "tools.h"
@@ -25,7 +26,46 @@ bool path_copy(char path[PATH_MAX], const char *src) {
     path_normalize(path);
     return src_len < PATH_MAX;
 }
+void path_join(char path[PATH_MAX], const char *src) {
+    char *end = path + strlen(path);
+    if (end != path && end[-1] == '/') {
+        end--;
+    }
+    if (*src == '/') {
+        src++;
+    }
+    snprintf(end, path + PATH_MAX - end, "/%s", src);
+}
+char* path_filename(char path[PATH_MAX]) {
+    path_normalize(path);
+    for (char *i = path + strlen(path); i != path; i--) {
+        if (i[-1] == '/') {
+            return i;
+        }
+    }
+    return path;
+}
+char* path_ext(char path[PATH_MAX]) {
+    for (char *i = path + strlen(path); i != path; i--) {
+        if (i[-1] == '.') {
+            return i;
+        }
+    }
+    return path;
+}
 
 bool dir_is_excluded(DirectoryIterator *it) {
     return it->is_valid && (strcmp(it->name, ".") == 0 || strcmp(it->name, "..") == 0);
+}
+
+bool dir_subdir(DirectoryIterator *it) {
+    if (!it->is_valid || !it->is_dir) {
+        return false;
+    }
+
+    path_join(it->base, it->name);
+    DirectoryIterator *subdir = dir_new(it->base);
+    dir_free(it);
+    it = subdir;
+    return true;
 }
