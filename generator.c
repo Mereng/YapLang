@@ -724,7 +724,7 @@ void generate_package_headers(Package *package) {
         Attribute attr = decl->attribute;
         if (attr.name == keywords.foreign) {
             for (size_t j = 0; j < attr.num_args; j++) {
-                if (attr.args[j].name != keywords.import_keyword) {
+                if (attr.args[j].name != keywords.header) {
                     continue;
                 }
                 Expression *expr = attr.args[j].expr;

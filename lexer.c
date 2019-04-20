@@ -23,6 +23,7 @@ struct {
     const char *import_keyword;
     const char *foreign;
     const char *assert;
+    const char *header;
 } keywords;
 
 const char **keywords_buf;
@@ -56,10 +57,11 @@ void keywords_init() {
     INIT_KEYWORD(import);
 
     start_keywords = keywords.func_keyword;
-    end_keywords = keywords.enum_keyword;
+    end_keywords = keywords.import_keyword;
 
     keywords.foreign = str_intern("foreign");
     keywords.assert = str_intern("assert");
+    keywords.header = str_intern("header");
 }
 
 #undef INIT_KEYWORD

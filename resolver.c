@@ -1193,7 +1193,7 @@ bool resolve_statement(Statement *stmt, Type *ret_type, StatementContext ctx);
 ResolvedExpression resolve_name(const char *name, SrcLocation loc) {
     Entity *entity = resolve_entity_name(name);
     if (!entity) {
-        fatal_error(loc, "Name does %s not exists", name);
+        fatal_error(loc, "Name %s does not exists", name);
     }
     if (entity->kind == ENTITY_VAR) {
         ResolvedExpression operand = resolved_lvalue(entity->type);
@@ -2328,7 +2328,7 @@ void init_builtin_entities() {
 void package_add_declarations(Package *package) {
     for (size_t i = 0; i < package->num_declarations; i++) {
         Declaration *d = package->declarations[i];
-        if (d->kind != DECL_ATTRIBUTE) {
+        if (d->kind != DECL_ATTRIBUTE && d->kind != DECL_IMPORT) {
             entity_append_declaration(d);
         }
     }
@@ -2390,7 +2390,7 @@ void process_package_imports(Package *package) {
                 buf_printf(path_buf, "%s/", package->path);
             }
             for (size_t k = 0; k < decl->import.num_names; k++) {
-                buf_printf(path_buf, "%s%s", k == 0 ? "" : "/", decl->import);
+                buf_printf(path_buf, "%s%s", k == 0 ? "" : "/", decl->import.names[k]);
             }
             Package *imported_package = import_package(path_buf);
             if (!imported_package) {
