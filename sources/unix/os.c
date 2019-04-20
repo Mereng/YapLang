@@ -1,5 +1,5 @@
 #include <dirent.h>
-#include <malloc.h>
+#include <memory.h>
 #include <stdlib.h>
 
 #include "os.h"
@@ -28,19 +28,18 @@ void dir_next(DirectoryIterator *it) {
     } while (dir_is_excluded(it));
 }
 
-DirectoryIterator* dir_new(const char *path) {
-    DirectoryIterator *it = calloc(1, sizeof(DirectoryIterator));
+void dir(DirectoryIterator *it, const char *path) {
+    memset(it, 0, sizeof(*it));
     DIR *dir = opendir(path);
     if (!dir) {
         it->is_valid = false;
         it->is_error = true;
-        return it;
+        return;
     }
     it->__handle = dir;
     path_copy(it->base, path);
     it->is_valid = true;
     dir_next(it);
-    return it;
 }
 
 void path_absolute(char path[PATH_MAX]) {

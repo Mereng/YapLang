@@ -23,11 +23,7 @@ void* ast_dup(const void *src, size_t size) {
     return ptr;
 }
 
-Type *type_new(TypeKind kind) {
-    Type *type = calloc(1, sizeof(Type));
-    type->kind = kind;
-    return type;
-}
+#define ASTDUP(x) ast_dup(x, num_##x * sizeof(*x))
 
 Attribute attribute_new(const char *name, AttributeArgument *args, size_t num_args, SrcLocation location) {
     return (Attribute) {.name = name, .args = args, .num_args = num_args, .location = location};
@@ -128,10 +124,20 @@ Declaration* declaration_typedef(const char *name, Typespec *type, SrcLocation l
     decl->typedef_decl.type = type;
     return decl;
 }
-
 Declaration* declaration_attribute(Attribute attribute, SrcLocation loc) {
     Declaration *decl = declaration_new(DECL_ATTRIBUTE, NULL, loc);
     decl->attribute = attribute;
+    return decl;
+}
+Declaration* declaration_import(bool is_relative, const char **names, size_t num_names, bool is_import_all,
+                                ImportItem *items, size_t num_items, SrcLocation loc) {
+    Declaration *decl = declaration_new(DECL_IMPORT, NULL, loc);
+    decl->import.is_relative = is_relative;
+    decl->import.names = ASTDUP(names);
+    decl->import.num_names = num_names;
+    decl->import.is_import_all = is_import_all;
+    decl->import.items = ASTDUP(items);
+    decl->import.num_items = num_items;
     return decl;
 }
 
@@ -233,7 +239,6 @@ Expression* expression_field(Expression *operand, const char *field, SrcLocation
     expr->field.name = field;
     return expr;
 }
-
 Expression* expression_compound(Typespec *type, CompoundField *fields, size_t num_fields, SrcLocation loc) {
     Expression *expr = expression_new(EXPR_COMPOUND, loc);
     expr->compound.type = type;
@@ -241,7 +246,6 @@ Expression* expression_compound(Typespec *type, CompoundField *fields, size_t nu
     expr->compound.num_fields = num_fields;
     return expr;
 }
-
 Expression* expression_sizeof_type(Typespec *type, SrcLocation loc) {
     Expression *expr = expression_new(EXPR_SIZEOF_TYPE, loc);
     expr->size_of_type = type;
@@ -267,6 +271,11 @@ Expression* expression_offsetof(Typespec *type, const char *name, SrcLocation lo
     expr->offset_of_field.type = type;
     expr->offset_of_field.name = name;
     return expr;
+}
+Expression* expression_paren(Expression *expr, SrcLocation loc) {
+    Expression *e = expression_new(EXPR_PAREN, loc);
+    e->paren.expr = expr;
+    return e;
 }
 
 Statement* statement_new(StatementKind kind, SrcLocation loc) {
@@ -358,3 +367,5 @@ Statement* statement_attribute(Attribute attr, SrcLocation loc) {
     stmt->attribute = attr;
     return stmt;
 }
+
+#undef ASTDUP

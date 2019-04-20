@@ -82,7 +82,7 @@ Expression* parse_expression_operand() {
         } else {
             Expression *expr = parse_expression();
             expect_token(TOKEN_RPAREN);
-            return expr;
+            return expression_paren(expr, loc);
         }
     } else if (match_keyword(keywords.sizeof_keyword)) {
         expect_token(TOKEN_LPAREN);
@@ -692,6 +692,41 @@ Declaration* parse_declaration_attribute(SrcLocation loc) {
     return declaration_attribute(parse_attribute(), loc);
 }
 
+Declaration* parse_declaration_import(SrcLocation loc) {
+    bool is_relative = false;
+    if (match_token(TOKEN_DOT)) {
+        is_relative = true;
+    }
+    const char **names = NULL;
+    buf_push(names, token.name);
+    expect_token(TOKEN_NAME);
+    while (match_token(TOKEN_DOT)) {
+        buf_push(names, token.name);
+        expect_token(TOKEN_NAME);
+    }
+    bool is_import_all = false;
+    ImportItem *items = NULL;
+    if (match_token(TOKEN_LBRACE)) {
+        while (!is_token(TOKEN_RBRACE)) {
+            if (match_token(TOKEN_ELLIPSIS)) {
+                is_import_all = true;
+            } else {
+                const char *name = parse_name();
+                if (match_token(TOKEN_ASSIGN)) {
+                    buf_push(items, ((ImportItem) {.name = parse_name(), .alias = name}));
+                } else {
+                    buf_push(items, ((ImportItem){.name = name}));
+                }
+                if (!match_token(TOKEN_COMMA)) {
+                    break;
+                }
+            }
+        }
+        expect_token(TOKEN_RBRACE);
+    }
+    return declaration_import(is_relative, names, buf_len(names), is_import_all, items, buf_len(items), loc);
+}
+
 Declaration* try_parse_declaration() {
     if (match_keyword(keywords.enum_keyword)) {
         return parse_declaration_enum();
@@ -709,6 +744,8 @@ Declaration* try_parse_declaration() {
         return parse_declaration_func(token.location);
     } else if (match_token(TOKEN_POUND)) {
         return parse_declaration_attribute(token.location);
+    } else if (match_keyword(keywords.import_keyword)) {
+        return parse_declaration_import(token.location);
     } else {
         return NULL;
     }

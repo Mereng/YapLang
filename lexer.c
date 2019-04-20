@@ -20,6 +20,7 @@ struct {
     const char *return_keyword;
     const char *continue_keyword;
     const char *enum_keyword;
+    const char *import_keyword;
     const char *foreign;
     const char *assert;
 } keywords;
@@ -52,6 +53,7 @@ void keywords_init() {
     INIT_KEYWORD(return);
     INIT_KEYWORD(continue);
     INIT_KEYWORD(enum);
+    INIT_KEYWORD(import);
 
     start_keywords = keywords.func_keyword;
     end_keywords = keywords.enum_keyword;

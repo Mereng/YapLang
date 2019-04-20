@@ -29,109 +29,6 @@ typedef struct StatementBlock StatementBlock;
 void* ast_alloc(size_t size);
 void* ast_dup(const void *src, size_t size);
 
-
-typedef enum EntityState {
-    ENTITY_UNRESOLVED,
-    ENTITY_RESOLVING,
-    ENTITY_RESOLVED
-} EntityState;
-
-typedef enum EntityKind {
-    ENTITY_NONE,
-    ENTITY_VAR,
-    ENTITY_CONST,
-    ENTITY_TYPE,
-    ENTITY_ENUM_CONST,
-    ENTITY_FUNC
-} EntityKind;
-
-typedef union Value {
-    char c;
-    signed char sc;
-    unsigned char uc;
-    bool b;
-    short s;
-    unsigned short us;
-    int i;
-    unsigned int ui;
-    long l;
-    unsigned long ul;
-    long long ll;
-    unsigned long long ull;
-    uintptr_t p;
-} Value;
-
-typedef struct Entity {
-    EntityKind kind;
-    EntityState state;
-    const char *name;
-    Declaration *decl;
-    Type *type;
-    Value val;
-
-} Entity;
-
-
-typedef struct TypeField {
-    const char *name;
-    Type *type;
-    size_t offset;
-} TypeField;
-
-typedef enum TypeKind {
-    TYPE_NONE,
-    TYPE_VOID,
-    TYPE_CHAR,
-    TYPE_BOOL,
-    TYPE_SCHAR,
-    TYPE_UCHAR,
-    TYPE_SHORT,
-    TYPE_USHORT,
-    TYPE_INT,
-    TYPE_UINT,
-    TYPE_LONG,
-    TYPE_ULONG,
-    TYPE_LLONG,
-    TYPE_ULLONG,
-    TYPE_ENUM,
-    TYPE_FLOAT,
-    TYPE_DOUBLE,
-    TYPE_POINTER,
-    TYPE_FUNC,
-    TYPE_STRUCT,
-    TYPE_UNION,
-    TYPE_ARRAY,
-    TYPE_INCOMPLETE,
-    TYPE_COMPLETING,
-    TYPE_CONST,
-    TYPE_MAX
-} TypeKind;
-
-
-struct Type {
-    TypeKind kind;
-    size_t size;
-    size_t align;
-    Entity *entity;
-    Type *base;
-    bool is_nonmodify;
-    union {
-        struct {
-            TypeField *fields;
-            size_t num_fields;
-        } aggregate;
-        size_t num_elements;
-        struct {
-            Type **args;
-            size_t num_args;
-            Type *ret;
-            bool is_variadic;
-        } func;
-    };
-};
-
-Type *type_new(TypeKind kind);
-
 typedef struct AttributeArgument {
     const char *name;
     Expression *expr;
@@ -198,7 +95,8 @@ enum DeclarationKind {
     DECL_CONST,
     DECL_TYPEDEF,
     DECL_FUNC,
-    DECL_ATTRIBUTE
+    DECL_ATTRIBUTE,
+    DECL_IMPORT
 };
 
 struct EnumItem {
@@ -220,6 +118,10 @@ struct FuncParam {
     SrcLocation location;
 };
 
+typedef struct ImportItem {
+    const char *name;
+    const char *alias;
+} ImportItem;
 
 struct Declaration {
     DeclarationKind kind;
@@ -254,6 +156,14 @@ struct Declaration {
         struct {
             Typespec *type;
         } typedef_decl;
+        struct {
+            bool is_relative;
+            const char **names;
+            size_t num_names;
+            bool is_import_all;
+            ImportItem *items;
+            size_t num_items;
+        } import;
     };
     SrcLocation location;
 };
@@ -270,6 +180,8 @@ Declaration* declaration_func(const char *name, FuncParam *params, size_t num_pa
                               bool is_variadic, StatementBlock body, SrcLocation loc);
 Declaration* declaration_typedef(const char *name, Typespec *type, SrcLocation loc);
 Declaration* declaration_attribute(Attribute attribute, SrcLocation loc);
+Declaration* declaration_import(bool is_relative, const char **names, size_t num_names, bool import_all,
+        ImportItem *items, size_t num_items, SrcLocation loc);
 Attribute* get_declaration_attribute(Declaration *declaration, const char *name);
 
 struct DeclarationList {
@@ -298,7 +210,8 @@ enum ExpressionKind {
     EXPR_SIZEOF_EXPR,
     EXPR_ALIGNOF_TYPE,
     EXPR_ALIGNOF_EXPR,
-    EXPR_OFFSETOF
+    EXPR_OFFSETOF,
+    EXPR_PAREN
 };
 
 typedef enum CompoundFieldKind {
@@ -383,6 +296,9 @@ struct Expression {
             Typespec *type;
             const char *name;
         } offset_of_field;
+        struct {
+            Expression *expr;
+        } paren;
     };
     SrcLocation location;
 };
@@ -406,6 +322,7 @@ Expression* expression_sizeof_expr(Expression *sizeof_expr, SrcLocation loc);
 Expression* expression_alignof_type(Typespec *type, SrcLocation loc);
 Expression* expression_alignof_expr(Expression *alignof_expr, SrcLocation loc);
 Expression* expression_offsetof(Typespec *type, const char *name, SrcLocation loc);
+Expression* expression_paren(Expression *expr, SrcLocation loc);
 
 enum StatementKind {
     STMT_NONE,

@@ -6,7 +6,8 @@ SrcLocation gen_location;
 
 const char **gen_header_buf;
 
-const char *gen_init = "#include <stdbool.h>\n"
+const char *gen_init = "#define _CRT_SECURE_NO_WARNINGS\n"
+                       "#include <stdbool.h>\n"
                        "#include <stdint.h>\n"
                        "#include <stddef.h>\n"
                        "#include <assert.h>\n"
@@ -45,12 +46,38 @@ void genln() {
 }
 #define genlnf(...) (genln(), genf(__VA_ARGS__))
 
+Map names_map;
+
+const char* get_name_default(const void *key, const char *default_name) {
+    const char *name = map_get(&names_map, key);
+    if (!name) {
+        Entity *entity = get_resolved_entity(key);
+        if (entity) {
+            if (entity->external_name) {
+                name = entity->external_name;
+            } else if (entity->package->external_name) {
+                name = stringf("%s%s", entity->package->external_name, entity->name);
+            } else {
+                name = entity->name;
+            }
+        } else {
+            name = default_name;
+        }
+        map_put(&names_map, key, (void*)name);
+    }
+    return name;
+}
+
+const char* get_name(const void *key) {
+    return get_name_default(key, "err!");
+}
+
 const char* cdecl_name(Type *type) {
     const char *name = type_names[type->kind];
     if (name) {
         return name;
     } else {
-        return type->entity->name;
+        return get_name(type->entity);
     }
 }
 
@@ -74,7 +101,7 @@ char* type_to_cdecl(Type *type, const char *str) {
             return type_to_cdecl(type->base, stringf("const %s", cdecl_paren(str, *str)));
         case TYPE_FUNC: {
             char *buf = NULL;
-            buf_printf(buf, "%s(", cdecl_paren(stringf("*%s", str), *str));
+            buf_printf(buf, "(*%s)(", str);
             if (type->func.num_args == 0) {
                 buf_printf(buf, "void");
             } else {
@@ -101,7 +128,7 @@ char* typespec_to_cdecl(Typespec *typespec, const char *str) {
     }
     switch (typespec->kind) {
         case TYPESPEC_NAME:
-            return stringf("%s%s%s", typespec->name, *str ? " ": "", str);
+            return stringf("%s%s%s", get_name_default(typespec, typespec->name), *str ? " ": "", str);
         case TYPESPEC_ARRAY: {
             if (typespec->size == 0) {
                 return typespec_to_cdecl(typespec->base, cdecl_paren(stringf("%s[]", str), *str));
@@ -120,7 +147,7 @@ char* typespec_to_cdecl(Typespec *typespec, const char *str) {
             return typespec_to_cdecl(typespec->base, stringf("const %s", cdecl_paren(str, *str)));
         case TYPESPEC_FUNC: {
             char *buf = NULL;
-            buf_printf(buf, "%s(", cdecl_paren(stringf("*%s", str), *str));
+            buf_printf(buf, "(*%s)(", str);
             if (typespec->func.num_args == 0) {
                 buf_printf(buf, "void");
             } else {
@@ -145,7 +172,6 @@ char* typespec_to_cdecl(Typespec *typespec, const char *str) {
             return NULL;
     }
 }
-
 
 char char_to_escape[256] = {
         ['\0'] = '0',
@@ -273,7 +299,7 @@ void generate_expression(Expression *expr) {
             generate_string(expr->str_lit.val, expr->str_lit.mod == TOKENMOD_MULTILINE);
             break;
         case EXPR_NAME:
-            genf("%s", expr->name);
+            genf("%s", get_name_default(expr, expr->name));
             break;
         case EXPR_CAST:
             genf("(%s)(", type_to_cdecl(get_resolved_type(expr->cast.typespec), ""));
@@ -354,6 +380,11 @@ void generate_expression(Expression *expr) {
             break;
         case EXPR_OFFSETOF:
             genf("offsetof(%s, %s)", typespec_to_cdecl(expr->offset_of_field.type, ""), expr->offset_of_field.name);
+            break;
+        case EXPR_PAREN:
+            genf("(");
+            generate_expression(expr->paren.expr);
+            genf(")");
             break;
         default:
             assert(0);
@@ -534,7 +565,7 @@ void generate_statement(Statement *stmt) {
 
 void generate_func_declaration(Declaration *decl) {
     char *result = NULL;
-    buf_printf(result, "%s(", decl->name);
+    buf_printf(result, "%s(", get_name(decl));
 
     if (decl->func.num_params == 0) {
         buf_printf(result, "void");
@@ -562,7 +593,7 @@ void generate_func_declaration(Declaration *decl) {
 }
 
 void generate_forward_declarations() {
-    for (Entity **it = global_entities_buf; it != buf_end(global_entities_buf); it++) {
+    for (Entity **it = entities_ordered; it != buf_end(entities_ordered); it++) {
         Entity *entity = *it;
         Declaration *decl = entity->decl;
         if (!decl) {
@@ -573,11 +604,11 @@ void generate_forward_declarations() {
         }
         switch (decl->kind) {
             case DECL_STRUCT:
-                genlnf("typedef struct %s %s;", entity->name, entity->name);
+            case DECL_UNION: {
+                const char *name = get_name(entity);
+                genlnf("typedef %s %s %s;", decl->kind == DECL_STRUCT ? "struct" : "union", name, name);
                 break;
-            case DECL_UNION:
-                genlnf("typedef union %s %s;", entity->name, entity->name);
-                break;
+            }
             default:
                 break;
         }
@@ -585,7 +616,10 @@ void generate_forward_declarations() {
 }
 
 void generate_aggregate(Declaration *decl) {
-    genlnf("%s %s {", decl->kind == DECL_STRUCT ? "struct": "union", decl->name);
+    if (decl->is_incomplete) {
+        return;;
+    }
+    genlnf("%s %s {", decl->kind == DECL_STRUCT ? "struct": "union", get_name(decl));
     gen_indent++;
     for (size_t i = 0; i < decl->aggregate.num_items; i++) {
         AggregateItem item = decl->aggregate.items[i];
@@ -610,7 +644,7 @@ void generate_declaration(Entity *entity) {
     generate_sync_location(decl->location);
     switch (decl->kind) {
         case DECL_CONST:
-            genlnf("#define %s (", entity->name);
+            genlnf("#define %s (", get_name(entity));
             if (decl->const_decl.type) {
                 genf("(%s)(", typespec_to_cdecl(decl->const_decl.type, ""));
             }
@@ -623,9 +657,9 @@ void generate_declaration(Entity *entity) {
         case DECL_VAR:
             genlnf("extern ");
             if (decl->var.type && !is_array_typespec_incomplete(decl->var.type)) {
-                genlnf("%s", typespec_to_cdecl(decl->var.type, entity->name));
+                genlnf("%s", typespec_to_cdecl(decl->var.type, get_name(entity)));
             } else {
-                genlnf("%s", type_to_cdecl(entity->type, entity->name));
+                genlnf("%s", type_to_cdecl(entity->type, get_name(entity)));
             }
             genf(";");
             break;
@@ -638,10 +672,10 @@ void generate_declaration(Entity *entity) {
             generate_aggregate(decl);
             break;
         case DECL_TYPEDEF:
-            genlnf("typedef %s;", typespec_to_cdecl(decl->typedef_decl.type, entity->name));
+            genlnf("typedef %s;", typespec_to_cdecl(decl->typedef_decl.type, get_name(entity)));
             break;
         case DECL_ENUM:
-            genlnf("typedef int %s;", decl->name);
+            genlnf("typedef int %s;", get_name(decl));
             break;
         default:
             assert(0);
@@ -656,10 +690,10 @@ void generate_ordered_entities() {
 }
 
 void generate_definitions() {
-    for (Entity **it = global_entities_buf; it != buf_end(global_entities_buf); it++) {
+    for (Entity **it = entities_ordered; it != buf_end(entities_ordered); it++) {
         Entity *entity = *it;
         Declaration *decl = entity->decl;
-        if (!decl || get_declaration_attribute(decl, keywords.foreign) || decl->is_incomplete) {
+        if (entity->state != ENTITY_RESOLVED || !decl || get_declaration_attribute(decl, keywords.foreign) || decl->is_incomplete) {
             continue;
         }
         if (decl->kind == DECL_FUNC) {
@@ -669,9 +703,9 @@ void generate_definitions() {
             genln();
         } else if (decl->kind == DECL_VAR) {
             if (decl->var.type && !is_array_typespec_incomplete(decl->var.type)){
-                genlnf("%s", typespec_to_cdecl(decl->var.type, entity->name));
+                genlnf("%s", typespec_to_cdecl(decl->var.type, get_name(entity)));
             } else {
-                genlnf("%s", type_to_cdecl(entity->type, entity->name));
+                genlnf("%s", type_to_cdecl(entity->type, get_name(entity)));
             }
             if (decl->var.expr) {
                 genf(" = ");
@@ -681,25 +715,23 @@ void generate_definitions() {
         }
     }
 }
-
-void generate_headers() {
-    const char *import_name = str_intern("import");
-    for (size_t i = 0; i < global_declaration_list->num_declarations; i++) {
-        Declaration *decl = global_declaration_list->declarations[i];
+void generate_package_headers(Package *package) {
+    for (size_t i = 0; i < package->num_declarations; i++) {
+        Declaration *decl = package->declarations[i];
         if (decl->kind != DECL_ATTRIBUTE) {
             continue;
         }
         Attribute attr = decl->attribute;
         if (attr.name == keywords.foreign) {
             for (size_t j = 0; j < attr.num_args; j++) {
-                if (attr.args[j].name != import_name) {
+                if (attr.args[j].name != keywords.import_keyword) {
                     continue;
                 }
                 Expression *expr = attr.args[j].expr;
                 if (expr->kind != EXPR_STR) {
                     fatal_error(decl->location, "#foreign import' arguments must be string");
                 }
-                const char *header = expr->name;
+                const char *header = expr->str_lit.val;
                 bool found = false;
                 for (const char **it = gen_header_buf; it != buf_end(gen_header_buf); it++) {
                     if (*it == header) {
@@ -720,11 +752,33 @@ void generate_headers() {
     }
 }
 
+void generate_foreign_headers() {
+    for (size_t i = 0; i < buf_len(package_list); i++) {
+        generate_package_headers(package_list[i]);
+    }
+}
+
+void generate_package_external_names() {
+    for (size_t i = 0; i < buf_len(package_list); i++) {
+        Package *p = package_list[i];
+        if (!p->external_name) {
+            char *external = NULL;
+            for (const char *j = p->path; *j; j++) {
+                buf_printf(external, "%c", *j == '/' ? '_' : *j);
+            }
+            buf_printf(external, "_");
+            p->external_name = str_intern(external);
+        }
+    }
+}
+
 void generate_c_code() {
     gen_buf = NULL;
-    generate_headers();
     genln();
     genf("%s", gen_init);
+    genln();
+    generate_package_external_names();
+    generate_foreign_headers();
     generate_forward_declarations();
     genln();
     generate_ordered_entities();

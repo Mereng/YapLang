@@ -76,28 +76,12 @@ const char* str_intern(const char *str) {
     return str_intern_range(str, str + strlen(str));
 }
 
-void buf_test() {
-    int *buf = NULL;
+#define MAX_SEARCH_PATHS 256
+struct {
+    const char *paths[MAX_SEARCH_PATHS];
+    size_t num_paths;
+} packages_search_paths;
 
-    buf_push(buf, 2);
-    buf_push(buf, 3);
-
-    assert(buf[0] == 2);
-    assert(buf[1] == 3);
-
-    buf_free(buf);
-    assert(buf == NULL);
-}
-
-
-void str_intern_test() {
-    char x[] = "Hello";
-    char y[] = "Hello";
-    assert(x != y);
-    const char *px = str_intern(x);
-    const char *py = str_intern(y);
-    assert(px == py);
-    char z[] = "hello!";
-    const char *pz = str_intern(z);
-    assert(px != pz);
+void packages_search_paths_add(const char *path) {
+    packages_search_paths.paths[packages_search_paths.num_paths++] = strdup(path);
 }

@@ -53,6 +53,15 @@ char* path_ext(char path[PATH_MAX]) {
     }
     return path;
 }
+void path_dir(char path[PATH_MAX]) {
+    char *i;
+    for (i = path + strlen(path); i != path && *i != '/'; i--) {
+        *i = 0;
+    }
+    if (i != path && *i == '/') {
+        *i = 0;
+    }
+}
 
 bool dir_is_excluded(DirectoryIterator *it) {
     return it->is_valid && (strcmp(it->name, ".") == 0 || strcmp(it->name, "..") == 0);
@@ -64,8 +73,9 @@ bool dir_subdir(DirectoryIterator *it) {
     }
 
     path_join(it->base, it->name);
-    DirectoryIterator *subdir = dir_new(it->base);
+    DirectoryIterator subdir;
+    dir(&subdir, it->base);
     dir_free(it);
-    it = subdir;
+    *it = subdir;
     return true;
 }

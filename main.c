@@ -23,18 +23,8 @@
 #include "resolver.c"
 #include "generator.c"
 #include "yap.c"
-#include "fortests.c"
 
 
 int main(int argc, char **argv) {
-//    keywords_init();
-//    buf_test();
-//    keywords_test();
-//    lex_test();
-//    str_intern_test();
-//    ast_test();
-//    parser_test();
-//    resolver_test();
-//    gen_test();
     return yap_main(argc, argv);
 }

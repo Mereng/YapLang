@@ -1,4 +1,121 @@
-DeclarationList *global_declaration_list;
+struct Package;
+
+typedef enum EntityState {
+    ENTITY_UNRESOLVED,
+    ENTITY_RESOLVING,
+    ENTITY_RESOLVED
+} EntityState;
+
+typedef enum EntityKind {
+    ENTITY_NONE,
+    ENTITY_VAR,
+    ENTITY_CONST,
+    ENTITY_TYPE,
+    ENTITY_ENUM_CONST,
+    ENTITY_FUNC
+} EntityKind;
+
+typedef union Value {
+    char c;
+    signed char sc;
+    unsigned char uc;
+    bool b;
+    short s;
+    unsigned short us;
+    int i;
+    unsigned int ui;
+    long l;
+    unsigned long ul;
+    long long ll;
+    unsigned long long ull;
+    uintptr_t p;
+} Value;
+
+typedef struct Entity {
+    EntityKind kind;
+    EntityState state;
+    const char *name;
+    Declaration *decl;
+    Type *type;
+    Value val;
+    struct Package *package;
+    bool is_reachable;
+    const char *external_name;
+} Entity;
+
+typedef struct Package {
+    const char *path;
+    char full_path[PATH_MAX];
+    Declaration **declarations;
+    size_t num_declarations;
+    Map entities_map;
+    Entity **entities;
+    const char *external_name;
+} Package;
+
+typedef struct TypeField {
+    const char *name;
+    Type *type;
+    size_t offset;
+} TypeField;
+
+typedef enum TypeKind {
+    TYPE_NONE,
+    TYPE_VOID,
+    TYPE_CHAR,
+    TYPE_BOOL,
+    TYPE_SCHAR,
+    TYPE_UCHAR,
+    TYPE_SHORT,
+    TYPE_USHORT,
+    TYPE_INT,
+    TYPE_UINT,
+    TYPE_LONG,
+    TYPE_ULONG,
+    TYPE_LLONG,
+    TYPE_ULLONG,
+    TYPE_ENUM,
+    TYPE_FLOAT,
+    TYPE_DOUBLE,
+    TYPE_POINTER,
+    TYPE_FUNC,
+    TYPE_STRUCT,
+    TYPE_UNION,
+    TYPE_ARRAY,
+    TYPE_INCOMPLETE,
+    TYPE_COMPLETING,
+    TYPE_CONST,
+    TYPE_MAX
+} TypeKind;
+
+
+struct Type {
+    TypeKind kind;
+    size_t size;
+    size_t align;
+    Entity *entity;
+    Type *base;
+    bool is_nonmodify;
+    union {
+        struct {
+            TypeField *fields;
+            size_t num_fields;
+        } aggregate;
+        size_t num_elements;
+        struct {
+            Type **args;
+            size_t num_args;
+            Type *ret;
+            bool is_variadic;
+        } func;
+    };
+};
+
+Type *type_new(TypeKind kind) {
+    Type *type = calloc(1, sizeof(Type));
+    type->kind = kind;
+    return type;
+}
 
 Type *type_void = &(Type){TYPE_VOID, 0};
 Type *type_char = &(Type){TYPE_CHAR, 1, 1};
@@ -222,12 +339,6 @@ bool convert_expression(ResolvedExpression *operand, Type *type) {
     return false;
 }
 
-Value convert_const_expression(Type *src, Type *dest, Value val) {
-    ResolvedExpression operand = resolved_const(src, val);
-    cast_expression(&operand, dest);
-    return operand.val;
-}
-
 bool is_null_pointer(ResolvedExpression operand) {
     if (operand.is_const && (operand.type->kind == TYPE_POINTER || is_integer_type(operand.type))) {
         cast_expression(&operand, type_ullong);
@@ -389,7 +500,6 @@ void set_resolved_expected_type(Expression *expr, Type *type) {
     map_put(&resolved_expected_type, expr, type);
 }
 
-
 Type* unqualify_type(Type *type) {
     if (type->kind == TYPE_CONST) {
         return type->base;
@@ -488,13 +598,60 @@ Entity local_entities[MAX_LOCAL_ENTITIES];
 Entity *local_entities_end = local_entities;
 Entity **entities_ordered;
 
-void global_entities_put(Entity *entity) {
-    if (map_get(&global_entities, (void*)entity->name)) {
-        SrcLocation location = entity->decl ? entity->decl->location : location_builtin;
-        fatal_error(location, "Duplicate definition");
+bool is_local_entity(Entity *entity) {
+    return local_entities <= entity && entity < local_entities_end;
+}
+
+Map resolved_entity_map;
+
+Entity* get_resolved_entity(const void *key) {
+    return map_get(&resolved_entity_map, key);
+}
+
+void set_resolved_entity(const void *key, Entity *entity) {
+    if (!is_local_entity(entity)) {
+        map_put(&resolved_entity_map, key, entity);
     }
-    map_put(&global_entities, (void*)entity->name, entity);
-    buf_push(global_entities_buf, entity);
+}
+
+Package *builtin_package;
+Package *current_package;
+Map package_map;
+Package **package_list;
+
+Entity* get_package_entity(Package *package, const char *nane) {
+    return map_get(&package->entities_map, nane);
+}
+
+void packages_add(Package *package) {
+    Package *old = map_get(&package_map, package->path);
+    if (old != package) {
+        map_put(&package_map, package->path, package);
+        buf_push(package_list, package);
+    }
+}
+
+Package *package_enter(Package *package) {
+    Package *old = current_package;
+    current_package = package;
+    return old;
+}
+
+void package_leave(Package *package) {
+    current_package = package;
+}
+
+void global_entities_put(const char *name, Entity *entity) {
+    Entity *old = map_get(&current_package->entities_map, name);
+    if (old) {
+        if (entity == old)  {
+            return;
+        }
+        SrcLocation loc = entity->decl ? entity->decl->location : location_builtin;
+        fatal_error(loc, "Duplicate definition of %s", name);
+    }
+    map_put(&current_package->entities_map, name, entity);
+    buf_push(current_package->entities, entity);
 }
 
 Type* resolve_typespec(Typespec *typespec);
@@ -590,6 +747,8 @@ Entity* entity_new(EntityKind kind, const char *name, Declaration *declaration) 
     entity->kind = kind;
     entity->name = name;
     entity->decl = declaration;
+    entity->package = current_package;
+    set_resolved_entity(entity, entity);
     return entity;
 }
 
@@ -616,15 +775,25 @@ Entity* entity_declaration(Declaration *declaration) {
     }
 
     Entity *entity = entity_new(kind, declaration->name, declaration);
-    if (declaration->kind == DECL_STRUCT || declaration->kind == DECL_UNION) {
-        entity->state = ENTITY_RESOLVED;
-        entity->type = type_incomplete(entity);
+    set_resolved_entity(declaration, entity);
+    Attribute *foreign = get_declaration_attribute(declaration, keywords.foreign);
+    if (foreign) {
+        if (foreign->num_args > 1) {
+            fatal_error(declaration->location, "foreign takes 0 or 1 argument");
+        }
+        const char *external_name;
+        if (foreign->num_args == 0) {
+            external_name = entity->name;
+        } else {
+            Expression *arg = foreign->args[0].expr;
+            if (arg->kind != EXPR_STR) {
+                fatal_error(declaration->location, "foreign argument must be string");
+            }
+            external_name = arg->str_lit.val;
+        }
+        entity->external_name = external_name;
     }
     return entity;
-}
-
-Entity *entity_enum_const(const char *name, Declaration *declaration) {
-    return entity_new(ENTITY_ENUM_CONST, name, declaration);
 }
 
 Entity* entity_get_local(const char *name) {
@@ -639,7 +808,7 @@ Entity* entity_get_local(const char *name) {
 
 Entity* entity_get(const char *name) {
     Entity *entity = entity_get_local(name);
-    return entity ? entity : map_get(&global_entities, (void*)name);
+    return entity ? entity : get_package_entity(current_package, name);
 }
 
 bool local_entities_push_var(const char *name, Type *type) {
@@ -666,21 +835,10 @@ void local_scope_leave(Entity *ptr_end) {
     local_entities_end = ptr_end;
 }
 
-void entity_append_const(const char *name, Type *type, Value val) {
-    Entity *entity = entity_new(ENTITY_CONST, str_intern(name), NULL);
-    entity->state = ENTITY_RESOLVED;
-    entity->type = type;
-    entity->val = val;
-    global_entities_put(entity);
-}
-
 Entity* entity_append_declaration(Declaration *declaration) {
     Entity *entity = entity_declaration(declaration);
-    global_entities_put(entity);
+    global_entities_put(entity->name, entity);
     if (declaration->kind == DECL_ENUM) {
-        entity->state = ENTITY_RESOLVED;
-        entity->type = type_enum(entity);
-        buf_push(entities_ordered, entity);
         Typespec *enum_type = typespec_name(str_intern("int"), declaration->location);
         const char *prev_item_name = NULL;
         for (size_t i = 0; i < declaration->enum_delc.num_items; i++) {
@@ -701,27 +859,33 @@ Entity* entity_append_declaration(Declaration *declaration) {
     return entity;
 }
 
-void entity_append_type(const char *name, Type *type) {
+Entity* entity_append_type(const char *name, Type *type) {
     Entity *entity = entity_new(ENTITY_TYPE, str_intern(name), NULL);
     entity->state = ENTITY_RESOLVED;
     entity->type = type;
-    global_entities_put(entity);
+    entity->external_name = name;
+    global_entities_put(name, entity);
+    return entity;
 }
 
-
-void entity_append_func(const char *name, Type *type) {
-    Entity *entity = entity_new(ENTITY_FUNC, str_intern(name), NULL);
-    entity->state = ENTITY_RESOLVED;
-    entity->type = type;
-    global_entities_put(entity);
-}
-
-void entity_append_typedef(const char *name, Type *type) {
+Entity* entity_append_typedef(const char *name, Type *type) {
     Entity *entity = entity_new(ENTITY_TYPE, str_intern(name), declaration_typedef(name, typespec_name(name,
             location_builtin), location_builtin));
     entity->state = ENTITY_RESOLVED;
     entity->type = type;
-    global_entities_put(entity);
+    entity->external_name = name;
+    global_entities_put(name, entity);
+    return entity;
+}
+
+Entity* entity_append_const(const char *name, Type *type, Value val) {
+    Entity *entity = entity_new(ENTITY_CONST, str_intern(name), NULL);
+    entity->state = ENTITY_RESOLVED;
+    entity->type = type;
+    entity->val = val;
+    entity->external_name = name;
+    global_entities_put(name, entity);
+    return entity;
 }
 
 void unify_math_expressions(ResolvedExpression *left, ResolvedExpression *right) {
@@ -1032,7 +1196,11 @@ ResolvedExpression resolve_name(const char *name, SrcLocation loc) {
         fatal_error(loc, "Name does %s not exists", name);
     }
     if (entity->kind == ENTITY_VAR) {
-        return resolved_lvalue(entity->type);
+        ResolvedExpression operand = resolved_lvalue(entity->type);
+        if (operand.type->kind == TYPE_ARRAY) {
+            operand = resolved_decay(operand);
+        }
+        return operand;
     } else if (entity->kind == ENTITY_CONST) {
         return resolved_const(entity->type, entity->val);
     } else if (entity->kind == ENTITY_FUNC) {
@@ -1365,6 +1533,7 @@ ResolvedExpression resolve_expression_call(Expression *expr) {
             if (!cast_expression(&operand, entity->type)) {
                 fatal_error(expr->location, "Invalid type conversion");
             }
+            set_resolved_entity(expr->call.operand, entity);
             return operand;
         }
     }
@@ -1596,6 +1765,7 @@ ResolvedExpression resolve_expression_expected_type(Expression *expr, Type *expe
             break;
         case EXPR_NAME:
             resolved = resolve_expression_name(expr);
+            set_resolved_entity(expr, resolve_entity_name(expr->name));
             break;
         case EXPR_UNARY:
             resolved = resolve_expression_unary(expr);
@@ -1610,6 +1780,8 @@ ResolvedExpression resolve_expression_expected_type(Expression *expr, Type *expe
                     complete_type(entity->type);
                     resolved = resolved_const(type_usize, (Value) {.ull = entity->type->size});
                     set_resolved_type(expr->size_of_expr, entity->type);
+                    set_resolved_entity(expr->size_of_expr, entity);
+                    break;
                 }
             }
             ResolvedExpression result = resolve_expression(expr->size_of_expr);
@@ -1631,6 +1803,7 @@ ResolvedExpression resolve_expression_expected_type(Expression *expr, Type *expe
                     complete_type(entity->type);
                     resolved = resolved_const(type_usize, (Value) {.ull = entity->type->align});
                     set_resolved_type(expr->align_of_expr, entity->type);
+                    set_resolved_entity(expr->align_of_expr, entity);
                     break;
                 }
             }
@@ -1647,6 +1820,7 @@ ResolvedExpression resolve_expression_expected_type(Expression *expr, Type *expe
         }
         case EXPR_OFFSETOF: {
             Type *type = resolve_typespec(expr->offset_of_field.type);
+            complete_type(type);
             if (type->kind != TYPE_STRUCT && type->kind != TYPE_UNION) {
                 fatal_error(expr->location, "offsetof can only be used with struct or union");
             }
@@ -1677,6 +1851,9 @@ ResolvedExpression resolve_expression_expected_type(Expression *expr, Type *expe
             break;
         case EXPR_CAST:
             resolved = resolve_expression_cast(expr);
+            break;
+        case EXPR_PAREN:
+            resolved  = resolve_expression_expected_type(expr->paren.expr, expected_type);
             break;
         default:
             assert(0);
@@ -1915,6 +2092,7 @@ Type* resolve_typespec(Typespec *typespec) {
             if (entity->kind != ENTITY_TYPE) {
                 fatal_error(typespec->location, "%s must be type", typespec->name);
             }
+            set_resolved_entity(typespec, entity);
             type = entity->type;
             break;
         }
@@ -2036,6 +2214,7 @@ void resolve_func(Entity *entity) {
 }
 
 void resolve_entity(Entity *entity) {
+    entity->is_reachable = true;
     if (entity->state == ENTITY_RESOLVED) {
         return;;
     }
@@ -2044,10 +2223,16 @@ void resolve_entity(Entity *entity) {
         fatal("Cyclic dependency of declaration %s", entity->name);
     }
     entity->state = ENTITY_RESOLVING;
-
+    Declaration *decl = entity->decl;
     switch (entity->kind) {
         case ENTITY_TYPE:
-            entity->type = resolve_declaration_type(entity->decl);
+            if (decl && decl->kind == DECL_TYPEDEF) {
+                entity->type = resolve_declaration_type(entity->decl);
+            } else if (decl && decl->kind == DECL_ENUM) {
+                entity->type = type_enum(entity);
+            } else {
+                entity->type = type_incomplete(entity);
+            }
             break;
         case ENTITY_VAR:
             entity->type = resolve_declaration_var(entity->decl);
@@ -2063,7 +2248,12 @@ void resolve_entity(Entity *entity) {
     }
 
     entity->state = ENTITY_RESOLVED;
-    buf_push(entities_ordered, entity);
+    if (decl->is_incomplete || (decl->kind != DECL_STRUCT && decl->kind != DECL_UNION)) {
+        buf_push(entities_ordered, entity);
+    }
+    if (entity->kind == ENTITY_FUNC) {
+        resolve_func(entity);
+    }
 
 }
 
@@ -2078,15 +2268,13 @@ Entity* resolve_entity_name(const char *name) {
 }
 
 void complete_entity(Entity *entity) {
-    resolve_entity(entity);
+    Package *old = package_enter(entity->package);
     if (entity->kind == ENTITY_TYPE) {
-        if (entity->decl && entity->decl->is_incomplete) {
-            return;
+        if (entity->decl && !get_declaration_attribute(entity->decl, keywords.foreign) && !entity->decl->is_incomplete) {
+            complete_type(entity->type);
         }
-        complete_type(entity->type);
-    } else if (entity->kind == ENTITY_FUNC) {
-        resolve_func(entity);
     }
+    package_leave(old);
 }
 
 void complete_entities() {
@@ -2098,7 +2286,9 @@ void complete_entities() {
     }
 }
 
-void init_entities() {
+void init_builtin_entities() {
+    Package *old = package_enter(builtin_package);
+
     entity_append_type("void", type_void);
     entity_append_type("bool", type_bool);
     entity_append_type("char", type_char);
@@ -2131,13 +2321,152 @@ void init_entities() {
     entity_append_const("true", type_bool, (Value) {.b = true});
     entity_append_const("false", type_bool, (Value) {.b = false});
     entity_append_const("NULL", type_pointer(type_void), (Value) {.p = 0});
+
+    package_leave(old);
 }
 
-void entities_append_declaration_list() {
-    for (size_t i = 0; i < global_declaration_list->num_declarations; i++) {
-        Declaration *d = global_declaration_list->declarations[i];
+void package_add_declarations(Package *package) {
+    for (size_t i = 0; i < package->num_declarations; i++) {
+        Declaration *d = package->declarations[i];
         if (d->kind != DECL_ATTRIBUTE) {
             entity_append_declaration(d);
         }
     }
+}
+
+bool parse_package(Package *package) {
+    Declaration **decls = NULL;
+    DirectoryIterator it;
+    for (dir(&it, package->full_path); it.is_valid; dir_next(&it)) {
+        if (it.is_dir || strcmp(get_ext(it.name), "yap") != 0 || it.name[0] == '_' || it.name[0] == '.') {
+            continue;
+        }
+        char path[PATH_MAX];
+        path_copy(path, it.base);
+        path_join(path, it.name);
+        path_absolute(path);
+        const char *code = read_file(path);
+        if (!code) {
+            fatal_error(((SrcLocation){.name = path}), "Failed to read")
+        }
+        init_stream(strdup(path), code);
+        DeclarationList *file_decls = parse_file();
+        for (size_t i = 0; i < file_decls->num_declarations; i++) {
+            buf_push(decls, file_decls->declarations[i]);
+        }
+    }
+    package->declarations = decls;
+    package->num_declarations = buf_len(decls);
+    return package;
+}
+
+void import_all_package_entities(Package *package) {
+    for (size_t i = 0; i < buf_len(package->entities); i++) {
+        if (package->entities[i]->package == package) {
+            global_entities_put(package->entities[i]->name, package->entities[i]);
+        }
+    }
+}
+
+void import_package_entities(Declaration *decl, Package *package) {
+    for (size_t i = 0; i < decl->import.num_items; i++) {
+        ImportItem item = decl->import.items[i];
+        Entity *entity = get_package_entity(package, item.name);
+        if (!entity) {
+            fatal_error(decl->location, "Entity '%s', doesn't exist in package '%s", item.name, package->path);
+        }
+        global_entities_put(item.alias ? item.alias : item.name, entity);
+    }
+}
+
+Package* import_package(const char *package_path);
+
+void process_package_imports(Package *package) {
+    for (size_t i = 0; i < package->num_declarations; i++) {
+        Declaration *decl = package->declarations[i];
+        if (decl->kind == DECL_IMPORT) {
+            char *path_buf = NULL;
+            if (decl->import.is_relative) {
+                buf_printf(path_buf, "%s/", package->path);
+            }
+            for (size_t k = 0; k < decl->import.num_names; k++) {
+                buf_printf(path_buf, "%s%s", k == 0 ? "" : "/", decl->import);
+            }
+            Package *imported_package = import_package(path_buf);
+            if (!imported_package) {
+                fatal_error(decl->location, "Failed to import package '%s'", path_buf);
+            }
+            buf_free(path_buf);
+            import_package_entities(decl, imported_package);
+            if (decl->import.is_import_all) {
+                import_all_package_entities(imported_package);
+            }
+        }
+    }
+}
+
+bool compile_package(Package *package) {
+    if (!parse_package(package)) {
+        return false;
+    }
+    Package *old = package_enter(package);
+    if (builtin_package) {
+        import_all_package_entities(builtin_package);
+    }
+    package_add_declarations(package);
+    process_package_imports(package);
+    package_leave(old);
+    return true;
+}
+
+bool is_package_dir(const char *search_path, const char *package_path) {
+    char path[PATH_MAX];
+    path_copy(path, search_path);
+    path_join(path, package_path);
+    DirectoryIterator it;
+    for (dir(&it, path); it.is_valid; dir_next(&it)) {
+        const char *ext = path_ext(it.name);
+        if (ext != it.name && strcmp(ext, "yap") == 0) {
+            dir_free(&it);
+            return true;
+        }
+    }
+    return false;
+}
+
+bool package_full_path_copy(char dest[PATH_MAX], const char *src) {
+    for (size_t i = 0; i < packages_search_paths.num_paths; i++) {
+        if (is_package_dir(packages_search_paths.paths[i], src)) {
+            path_copy(dest, packages_search_paths.paths[i]);
+            path_join(dest, src);
+            return true;
+        }
+    }
+    return false;
+}
+
+Package* import_package(const char *package_path) {
+    package_path = str_intern(package_path);
+    Package *package = map_get(&package_map, package_path);
+    if (!package) {
+        package = calloc(1, sizeof(Package));
+        package->path = package_path;
+        char full_path[PATH_MAX];
+        if (!package_full_path_copy(full_path, package_path)) {
+            return NULL;
+        }
+        strcpy(package->full_path, full_path);
+        packages_add(package);
+        compile_package(package);
+    }
+    return package;
+}
+
+void resolve_package_entities(Package *package) {
+    Package *old = package_enter(package);
+    for (size_t i = 0; i < buf_len(package->entities); i++) {
+        resolve_entity(package->entities[i]);
+        complete_entity(package->entities[i]);
+    }
+    package_leave(old);
 }
