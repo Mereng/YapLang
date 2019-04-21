@@ -416,9 +416,11 @@ void generate_simple_statement(Statement *stmt) {
                 } else {
                     genf("%s", typespec_to_cdecl(stmt->auto_assign.type, stmt->auto_assign.name));
                 }
+                genf(" = ");
                 if (stmt->auto_assign.init) {
-                    genf(" = ");
                     generate_expression(stmt->auto_assign.init);
+                } else {
+                    genf("{0}");
                 }
             } else {
                 genf("%s = ", type_to_cdecl(unqualify_type(get_resolved_type(stmt->auto_assign.init)), stmt->auto_assign.name));

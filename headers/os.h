@@ -26,7 +26,7 @@ bool dir_is_excluded(DirectoryIterator *it);
 bool dir_subdir(DirectoryIterator *it);
 
 void path_normalize(char *path);
-bool path_copy(char path[PATH_MAX], const char *src);
+void path_copy(char path[PATH_MAX], const char *src);
 void path_absolute(char path[PATH_MAX]);
 void path_join(char path[PATH_MAX], const char *src);
 char* path_filename(char path[PATH_MAX]);

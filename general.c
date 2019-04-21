@@ -83,5 +83,5 @@ struct {
 } packages_search_paths;
 
 void packages_search_paths_add(const char *path) {
-    packages_search_paths.paths[packages_search_paths.num_paths++] = strdup(path);
+    packages_search_paths.paths[packages_search_paths.num_paths++] = str_intern(path);
 }

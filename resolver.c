@@ -592,11 +592,10 @@ Type* promote_type(Type *type) {
 
 #define MAX_LOCAL_ENTITIES 1024
 
-Map global_entities;
-Entity **global_entities_buf;
 Entity local_entities[MAX_LOCAL_ENTITIES];
 Entity *local_entities_end = local_entities;
 Entity **entities_ordered;
+Entity **entities_reachable;
 
 bool is_local_entity(Entity *entity) {
     return local_entities <= entity && entity < local_entities_end;
@@ -1224,44 +1223,36 @@ ResolvedExpression resolve_unary(TokenKind op, ResolvedExpression operand) {
 }
 
 ResolvedExpression resolve_expression_unary(Expression *expr) {
-    if (expr->unary.op == TOKEN_BIN_AND) {
-        ResolvedExpression operand = resolve_expression(expr->unary.operand);
-        if (!operand.is_lvalue) {
-            fatal_error(expr->location, "Can't take address of non-lvalue");
-        }
-        return resolved_rvalue(type_pointer(operand.type));
-    } else {
-        ResolvedExpression operand = resolve_expression_decayed(expr->unary.operand);
-        switch (expr->unary.op) {
-            case TOKEN_MUL:
-                if (operand.type->kind != TYPE_POINTER) {
-                    fatal_error(expr->location, "Can't dereference non pointer type");
-                }
-                return resolved_lvalue(operand.type->base);
-            case TOKEN_ADD:
-            case TOKEN_SUB:
-                if (!is_math_type(operand.type)) {
-                    fatal_error(expr->location, "Can only use unary %s with mathematics type",
-                                token_kind_names[expr->unary.op]);
-                }
-                return resolve_unary(expr->unary.op, operand);
-            case TOKEN_BIN_NOT:
-                if (!is_integer_type(operand.type)) {
-                    fatal_error(expr->location, "Can only use ~ with integer type");
-                }
-                return resolve_unary(expr->unary.op, operand);
-            case TOKEN_NOT:
-                if (!is_scalar_type(operand.type)) {
-                    fatal_error(expr->location, "Can only use ! with scalar type");
-                }
-                return resolve_unary(expr->unary.op, operand);
-            default:
-                assert(0);
-                break;
-        }
-
-        return (ResolvedExpression) {0};
+    ResolvedExpression operand = resolve_expression_decayed(expr->unary.operand);
+    switch (expr->unary.op) {
+        case TOKEN_MUL:
+            if (operand.type->kind != TYPE_POINTER) {
+                fatal_error(expr->location, "Can't dereference non pointer type");
+            }
+            return resolved_lvalue(operand.type->base);
+        case TOKEN_ADD:
+        case TOKEN_SUB:
+            if (!is_math_type(operand.type)) {
+                fatal_error(expr->location, "Can only use unary %s with mathematics type",
+                            token_kind_names[expr->unary.op]);
+            }
+            return resolve_unary(expr->unary.op, operand);
+        case TOKEN_BIN_NOT:
+            if (!is_integer_type(operand.type)) {
+                fatal_error(expr->location, "Can only use ~ with integer type");
+            }
+            return resolve_unary(expr->unary.op, operand);
+        case TOKEN_NOT:
+            if (!is_scalar_type(operand.type)) {
+                fatal_error(expr->location, "Can only use ! with scalar type");
+            }
+            return resolve_unary(expr->unary.op, operand);
+        default:
+            assert(0);
+            break;
     }
+
+    return (ResolvedExpression) {0};
 }
 
 ResolvedExpression resolve_binary(TokenKind op, ResolvedExpression left, ResolvedExpression right) {
@@ -1768,7 +1759,20 @@ ResolvedExpression resolve_expression_expected_type(Expression *expr, Type *expe
             set_resolved_entity(expr, resolve_entity_name(expr->name));
             break;
         case EXPR_UNARY:
-            resolved = resolve_expression_unary(expr);
+            if (expr->unary.op == TOKEN_BIN_AND) {
+                ResolvedExpression operand;
+                if (expected_type && expected_type->kind == TYPE_POINTER) {
+                    operand = resolve_expression_expected_type(expr->unary.operand, expected_type->base);
+                } else {
+                    operand = resolve_expression(expr->unary.operand);
+                }
+                if (!operand.is_lvalue) {
+                    fatal_error(expr->location, "Can't take address of non-lvalue");
+                }
+                resolved = resolved_rvalue(type_pointer(operand.type));
+            } else {
+                resolved = resolve_expression_unary(expr);
+            }
             break;
         case EXPR_BINARY:
             resolved = resolve_expression_binary(expr);
@@ -2214,7 +2218,10 @@ void resolve_func(Entity *entity) {
 }
 
 void resolve_entity(Entity *entity) {
-    entity->is_reachable = true;
+    if (!entity->is_reachable && !is_local_entity(entity)) {
+        buf_push(entities_reachable, entity);
+        entity->is_reachable = true;
+    }
     if (entity->state == ENTITY_RESOLVED) {
         return;;
     }
@@ -2251,9 +2258,6 @@ void resolve_entity(Entity *entity) {
     if (decl->is_incomplete || (decl->kind != DECL_STRUCT && decl->kind != DECL_UNION)) {
         buf_push(entities_ordered, entity);
     }
-    if (entity->kind == ENTITY_FUNC) {
-        resolve_func(entity);
-    }
 
 }
 
@@ -2269,21 +2273,14 @@ Entity* resolve_entity_name(const char *name) {
 
 void complete_entity(Entity *entity) {
     Package *old = package_enter(entity->package);
-    if (entity->kind == ENTITY_TYPE) {
-        if (entity->decl && !get_declaration_attribute(entity->decl, keywords.foreign) && !entity->decl->is_incomplete) {
+    if (entity->decl && !get_declaration_attribute(entity->decl, keywords.foreign) && !entity->decl->is_incomplete) {
+        if (entity->kind == ENTITY_TYPE) {
             complete_type(entity->type);
+        } else if (entity->kind == ENTITY_FUNC) {
+            resolve_func(entity);
         }
     }
     package_leave(old);
-}
-
-void complete_entities() {
-    for (Entity **it = global_entities_buf; it != buf_end(global_entities_buf); it++) {
-        Entity *entity = *it;
-        if (entity->decl) {
-            complete_entity(entity);
-        }
-    }
 }
 
 void init_builtin_entities() {
@@ -2338,7 +2335,7 @@ bool parse_package(Package *package) {
     Declaration **decls = NULL;
     DirectoryIterator it;
     for (dir(&it, package->full_path); it.is_valid; dir_next(&it)) {
-        if (it.is_dir || strcmp(get_ext(it.name), "yap") != 0 || it.name[0] == '_' || it.name[0] == '.') {
+        if (it.is_dir || strcmp(path_ext(it.name), "yap") != 0 || it.name[0] == '_' || it.name[0] == '.') {
             continue;
         }
         char path[PATH_MAX];
@@ -2349,7 +2346,7 @@ bool parse_package(Package *package) {
         if (!code) {
             fatal_error(((SrcLocation){.name = path}), "Failed to read")
         }
-        init_stream(strdup(path), code);
+        init_stream(str_intern(path), code);
         DeclarationList *file_decls = parse_file();
         for (size_t i = 0; i < file_decls->num_declarations; i++) {
             buf_push(decls, file_decls->declarations[i]);
@@ -2465,8 +2462,15 @@ Package* import_package(const char *package_path) {
 void resolve_package_entities(Package *package) {
     Package *old = package_enter(package);
     for (size_t i = 0; i < buf_len(package->entities); i++) {
-        resolve_entity(package->entities[i]);
-        complete_entity(package->entities[i]);
+        if (package->entities[i]->package == package) {
+            resolve_entity(package->entities[i]);
+        }
     }
     package_leave(old);
+}
+
+void complete_reachable_entities() {
+    for (size_t i = 0; i < buf_len(entities_reachable); i++) {
+        complete_entity(entities_reachable[i]);
+    }
 }

@@ -48,6 +48,7 @@ int yap_main(int argc, char **argv) {
     main_entity->external_name = main;
     resolve_package_entities(builtin_package);
     resolve_package_entities(main_package);
+    complete_reachable_entities();
     char c_path[PATH_MAX];
     if (argc >= 3) {
         path_copy(c_path, argv[2]);

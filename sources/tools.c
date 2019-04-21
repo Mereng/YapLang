@@ -46,27 +46,3 @@ bool write_file(const char *path, const char *buf, size_t size) {
     fclose(file);
     return n == 1;
 }
-
-const char* get_ext(const char *path) {
-    for (const char *it = path + strlen(path); it != path; it--) {
-        if (it[-1] == '.') {
-            return it;
-        }
-    }
-    return NULL;
-}
-
-char* replace_ext(const char *path, const char *new_ext) {
-    const char *ext = get_ext(path);
-    if (!ext) {
-        return NULL;
-    }
-    size_t base_len = ext - path;
-    size_t new_ext_len = strlen(new_ext);
-    size_t new_path_len = base_len + new_ext_len;
-    char *new_path = malloc(new_path_len + 1);
-    memcpy(new_path, path, base_len);
-    memcpy(new_path + base_len, new_ext, new_ext_len);
-    new_path[new_path_len] = 0;
-    return new_path;
-}

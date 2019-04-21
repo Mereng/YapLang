@@ -19,7 +19,5 @@ typedef struct SrcLocation {
 char* stringf(const char *fmt, ...);
 char* read_file(const char *path);
 bool write_file(const char *path, const char *buf, size_t size);
-const char* get_ext(const char *path);
-char* replace_ext(const char *path, const char *new_ext);
 
 #endif

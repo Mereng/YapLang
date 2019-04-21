@@ -18,13 +18,10 @@ void path_normalize(char *path) {
     }
 }
 
-bool path_copy(char path[PATH_MAX], const char *src) {
-    size_t src_len = strlen(src);
-    size_t copy_len = MIN(src_len, PATH_MAX - 1);
-    memcpy(path, src, copy_len);
-    path[copy_len] = 0;
+void path_copy(char path[PATH_MAX], const char *src) {
+    strncpy(path, src, PATH_MAX);
+    path[PATH_MAX - 1] = 0;
     path_normalize(path);
-    return src_len < PATH_MAX;
 }
 void path_join(char path[PATH_MAX], const char *src) {
     char *end = path + strlen(path);
