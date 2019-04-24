@@ -17,6 +17,8 @@ void search_paths_init(const char *path_to_bin) {
         path_copy(yap_path, yappath_var);
         packages_search_paths_add(yap_path);
     }
+
+    packages_search_paths_add(".");
 }
 
 void init(const char *path_to_bin) {
@@ -35,6 +37,7 @@ int yap_main(int argc, char **argv) {
     builtin_package = calloc(1, sizeof(Package));
 
     init_builtin_entities();
+
     Package *main_package = import_package(package);
     if (!main_package) {
         printf("error: Failed to compile package '%s'\n", package);
