@@ -6,6 +6,7 @@ void search_paths_init(const char *path_to_bin) {
     } else {
         path_copy(root_path, path_to_bin);
         path_absolute(root_path),
+        path_normalize(root_path);
         path_dir(root_path);
     }
     packages_search_paths_add(root_path);

@@ -4,6 +4,8 @@ cmake_minimum_required(VERSION 3.13)
 file(GLOB C_FILES "sources/*.c")
 if (UNIX)
     file(GLOB PLATFORM_C_FILES "sources/unix/*.c")
+elseif(WIN32)
+    file(GLOB PLATFORM_C_FILES "sources/win/*.c")
 endif (UNIX)
 
 
