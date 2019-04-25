@@ -776,7 +776,6 @@ void generate_package_external_names() {
 
 void generate_c_code() {
     gen_buf = NULL;
-    genln();
     genf("%s", gen_init);
     genln();
     generate_package_external_names();
