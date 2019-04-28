@@ -3,10 +3,10 @@ const char *stream;
 const char *line_start;
 SrcLocation location_builtin = {.name = "<builtin>"};
 
-#define fatal_syntax(...) error_here(__VA_ARGS__); exit(-1);
-#define error_here(...) error(token.location, __VA_ARGS__);
-#define fatal_error(...) error(__VA_ARGS__); exit(-2);
-#define warning_here(...) warning(token.location, __VA_ARGS__);
+#define fatal_syntax(...) error_here(__VA_ARGS__); exit(-1)
+#define error_here(...) error(token.location, __VA_ARGS__)
+#define fatal_error(...) error(__VA_ARGS__); exit(-2)
+#define warning_here(...) warning(token.location, __VA_ARGS__)
 
 void error(SrcLocation location, const char* fmt, ...) {
     if (location.name == NULL) {
