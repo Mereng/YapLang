@@ -1341,7 +1341,7 @@ ResolvedExpression resolve_expression_binary_op(TokenKind op, const char *name,
                 return result;
             } else if (left.type->kind == TYPE_POINTER && right.type->kind == TYPE_POINTER) {
                 if (left.type->base != right.type->base) {
-                    fatal_error(loc, "Can't compare different pointer")
+                    fatal_error(loc, "Can't compare different pointer");
                 }
                 return resolved_rvalue(type_int);
             } else if ((is_null_pointer(left) && right.type->kind == TYPE_POINTER) ||
@@ -2017,7 +2017,7 @@ bool resolve_statement(Statement *stmt, Type *ret_type, StatementContext ctx) {
                 }
                 if (_case.is_default) {
                     if (has_default) {
-                        fatal_error(stmt->location, "Switch statement has nultiple default")
+                        fatal_error(stmt->location, "Switch statement has nultiple default");
                     }
                     has_default = true;
                 }
@@ -2344,7 +2344,7 @@ bool parse_package(Package *package) {
         path_absolute(path);
         const char *code = read_file(path);
         if (!code) {
-            fatal_error(((SrcLocation){.name = path}), "Failed to read")
+            fatal_error(((SrcLocation){.name = path}), "Failed to read");
         }
         init_stream(str_intern(path), code);
         DeclarationList *file_decls = parse_file();
