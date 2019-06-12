@@ -26,6 +26,7 @@ void fatal(const char *fmt, ...) {
     printf("FATAL: ");
     vprintf(fmt, args);
     va_end(args);
+    printf("\n");
     exit(1);
 }
 

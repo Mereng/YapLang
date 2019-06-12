@@ -32,5 +32,6 @@ void path_join(char path[PATH_MAX], const char *src);
 char* path_filename(char path[PATH_MAX]);
 char* path_ext(char path[PATH_MAX]);
 void path_dir(char path[PATH_MAX]);
+void get_path_executable(char dest[PATH_MAX]);
 
 #endif

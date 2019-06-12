@@ -1,10 +1,10 @@
-void search_paths_init(const char *path_to_bin) {
+void search_paths_init() {
     const char *yaproot = getenv("YAPROOT");
     char root_path[PATH_MAX];
     if (yaproot) {
         path_copy(root_path, yaproot);
     } else {
-        path_copy(root_path, path_to_bin);
+        get_path_executable(root_path);
         path_absolute(root_path),
         path_normalize(root_path);
         path_dir(root_path);
@@ -21,8 +21,8 @@ void search_paths_init(const char *path_to_bin) {
     packages_search_paths_add(".");
 }
 
-void init(const char *path_to_bin) {
-    search_paths_init(path_to_bin);
+void init() {
+    search_paths_init();
     keywords_init();
 }
 
@@ -32,7 +32,7 @@ int yap_main(int argc, char **argv) {
         return 1;
     }
     const char *package = argv[1];
-    init(argv[0]);
+    init();
 
     builtin_package = calloc(1, sizeof(Package));
 
@@ -68,6 +68,6 @@ int yap_main(int argc, char **argv) {
         return 1;
     }
 
-    printf("Succeeded");
+    printf("Succeeded\n");
     return 0;
 }

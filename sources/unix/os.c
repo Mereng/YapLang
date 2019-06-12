@@ -1,6 +1,7 @@
 #include <dirent.h>
 #include <memory.h>
 #include <stdlib.h>
+#include <unistd.h>
 
 #include "os.h"
 
@@ -46,4 +47,8 @@ void path_absolute(char path[PATH_MAX]) {
     char rel_path[PATH_MAX];
     path_copy(rel_path, path);
     realpath(rel_path, path);
+}
+
+void get_path_executable(char dest[PATH_MAX]) {
+    readlink("/proc/self/exe", dest, PATH_MAX);
 }
